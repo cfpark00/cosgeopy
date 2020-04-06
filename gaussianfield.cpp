@@ -1,13 +1,5 @@
-#define USEOPENMP 1
-//#define USEMPI 1
-/*------------------------------------------*/
-
-#ifdef USEOPENMP
+#ifdef _OPENMP
 #include <omp.h>
-#endif
-
-#ifdef USEMPI
-#include <mpi.h>
 #endif
 
 #include <string.h>
@@ -80,7 +72,9 @@ int main(int argc, char *argv[]){
     	else if (!strcmp(argv[i],"-filenamer")) filenamer = argv[++i];
     	else if (!strcmp(argv[i],"-ascii")) savemode = 1;
     	else if (!strcmp(argv[i],"-realspace")) realspace = 1;
+        #ifdef _OPENMP
         else if (!strcmp(argv[i],"-n_thread")) omp_set_num_threads(atoi(argv[++i]));
+        #endif
         else if (!strcmp(argv[i],"-doPk")) doPk=(strcmp(argv[++i],"0"));
         else if (!strcmp(argv[i],"-doBk")) doBk=(strcmp(argv[++i],"0"));
         else {
@@ -159,9 +153,13 @@ int main(int argc, char *argv[]){
         double *delta;
         delta = (double*) fftw_malloc(sizeof(double)*size);
 
+        #ifdef _OPENMP
         fftw_init_threads();
+        #endif
         fftw_plan p;
+        #ifdef _OPENMP
         fftw_plan_with_nthreads(omp_get_max_threads());
+        #endif
         p = fftw_plan_dft_c2r_3d(nside,nside,nside, delta_k, delta,FFTW_ESTIMATE);
         fftw_execute(p);
         fftw_destroy_plan(p);

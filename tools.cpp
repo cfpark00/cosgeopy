@@ -28,8 +28,9 @@ void fill_delta_k(fftw_complex* delta_k,int nside,int seed){
     int middle=nside/2;
     int middleplus1=nside/2+1;
     int yzsize=middleplus1*nside;
-
+    #ifdef _OPENMP
     #pragma omp parallel for
+    #endif
     for (int i=0;i<nside;i++){
         int ind=0;
         double mag;
@@ -121,8 +122,9 @@ void getPk(double* Pk,fftw_complex* delta_k,int nside){
     int yzsize=middleplus1*nside;
     int* counts=new int[nside/2+1];
     memset(counts, 0,(nside/2+1)*sizeof(int));
-
+    #ifdef _OPENMP
     #pragma omp parallel for
+    #endif
     for (int i=0;i<nside;i++){
         int ind=0;
         int k_abs_ind;
@@ -148,7 +150,9 @@ void getPk(double* Pk,fftw_complex* delta_k,int nside){
             }
         }
     }
+    #ifdef _OPENMP
     #pragma omp parallel for
+    #endif
     for (int i=0;i<nside/2+2;i++){
         if (counts[i]!=0) Pk[i]/=counts[i];
     }
@@ -162,7 +166,9 @@ void getBk_naive(fftw_complex* Bk,fftw_complex* delta_k,int nside){
     int* counts=new int[(nside/2+1)*(nside/2+1)];
     memset(counts, 0,(nside/2+1)*(nside/2+1)*sizeof(int));
 
+    #ifdef _OPENMP
     #pragma omp parallel for
+    #endif
     for (int i1=0;i1<nside;i1++){
         int ind1,ind2,ind3;
         int k_abs1,k_abs2;
@@ -230,7 +236,10 @@ void getBk_naive(fftw_complex* Bk,fftw_complex* delta_k,int nside){
             }
         }
     }
+    
+    #ifdef _OPENMP
     #pragma omp parallel for
+    #endif
     for (int i=0;i<nside/2+2;i++){
         for (int j=0;j<nside/2+2;j++){
             if (counts[i*middleplus1+j]!=0){

@@ -1,7 +1,7 @@
 #Make
-#CC=mpic++
 CC=g++
-CFLAGS=-Wall -lfftw3_omp -lfftw3 -lm -fopenmp
+CFLAGS=-Wall -lfftw3 -lm
+CFLAGS+=-lfftw3_omp -fopenmp
 
 
 all: gaussianfield
