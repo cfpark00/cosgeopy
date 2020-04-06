@@ -1,6 +1,13 @@
 # Gaussian_Field
 Simple Gaussian Random Field generator and naive Power/Bi spectrum estimator.
 
+## Prerequisite
+-g++ compiler
+-fftw3
+-OpenMP for parallelization
+
+-jupyter, numpy, matplotlib for Python interface
+
 ## Installation
 Run the following in the unzipped folder(where the Makefile is)
 
