@@ -1,2 +1,18 @@
 # Gaussian_Field
 Simple Gaussian Random Field generator and naive Power/Bi spectrum estimator
+
+## Installation
+Run the following in the unzipped folder(where the Makefile is)
+
+'''unix
+make
+'''
+
+## Run Example
+If doPk is 1, the powerspectrum is recomputed from the field, for sanity check. n_thread is the number of OpenMP thread to use
+
+The Bispectrum is a naive estimator, which is extremely slow.
+
+'''unix
+./gaussianfield -nside BOXSIDE -filenamek NAMETOSAVE_delta_k -filenamer NAMETOSAVE_delta_k -doPk 1 -filenamePk NAMETOSAVE_Pk -doBk 1 -filenameBk NAMETOSAVE_Bk -realspace -quiet -n_thread
+'''
