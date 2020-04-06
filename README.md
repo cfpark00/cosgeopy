@@ -8,7 +8,8 @@ Run the following in the unzipped folder(where the Makefile is)
 
 
 ## Run Example
-If doPk is 1, the powerspectrum is recomputed from the field, for sanity check. n_thread is the number of OpenMP thread to use
+If doPk is 1, the powerspectrum is recomputed from the field, for sanity check.
+n_thread is the number of OpenMP thread to use
 
 The Bispectrum is a naive estimator, which is extremely slow.
 
