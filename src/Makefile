@@ -1,7 +1,7 @@
 #Make
 #CC=mpic++
 CC=g++
-CFLAGS=-Wall -lfftw3_omp -lfftw3 -lm -fopenmp
+CFLAGS=-Wall -lfftw3_omp -lfftw3 -lm -fopenmp -O3
 
 
 all: fullrun gaussianfield powerspectrum bispectrum bispectrum_naive

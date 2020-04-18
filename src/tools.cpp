@@ -6,6 +6,7 @@
 #include <assert.h>
 #include <string.h>
 #include <numeric>
+#include <valarray>
 
 #include <iostream>
 #include <fstream>
@@ -175,26 +176,48 @@ inline int to1dind(int a1,int a2, int a3, int d){
     return a1*(a1+1)*(a1+2)/6+(a2)*(a2+1)/2+a3;
 }
 
-void getBk(double* Bk,fftw_complex* delta_k,int nside,int* ks,int numks){
-    std::cout<<"T0"<<std::endl;
+void getBk(double* Bk,fftw_complex* delta_k,int nside,int* ks,int numks,int start, int step,bool quiet){
+    if (!quiet) std::cout<<std::endl<<"  Generate k-rings"<<std::endl;
     int middleplus1=nside/2+1;
     int yzsize=middleplus1*nside;
     int csize=(nside/2+1)*(nside)*(nside);
     int size=nside*nside*nside;
-    int ny=nside/2;
+    int ny=(nside/2-start)/step;
+	//std::cout<<"got"<<std::endl;
 
     //Initialize the kbins
+    //No adaptive binning yet
+    assert((start>=0)&&("Start is negative"));
+    assert((step>0)&&("Step should be 1 or bigger"));
+
+    if (ks==NULL){
+	    numks=0;
+	    for(int i=0;i<middleplus1;i+=step) numks++;
+
+	    ks=(int*) malloc(sizeof(int)*numks);
+		int count=0;
+	    for(int i=0;i<middleplus1;i+=step,count++) ks[count]=i;
+	    //std::cout<<numks<<std::endl;
+	}
+
+	//std::cout<<numks<<std::endl;
+	
+    /*
     if (ks==NULL){
         ks=(int*) malloc(sizeof(int)*(nside/2+1));
         numks=nside/2+1;
         for(int i=0;i<numks;i++) ks[i]=i;
     }
-    else assert(0&&("Not Implemented"));
+    else{
+
+    }
+    */
 
     //Make the k-space rings
     fftw_complex *partialdelta_ks;
-    partialdelta_ks = (fftw_complex*) fftw_malloc(sizeof(fftw_complex)*(nside/2+1)*csize);
+    partialdelta_ks = (fftw_complex*) fftw_malloc(sizeof(fftw_complex)*numks*csize);
     memset(partialdelta_ks, 0,sizeof(fftw_complex)*numks*csize);
+
 
     #ifdef _OPENMP
     #pragma omp parallel for
@@ -208,28 +231,30 @@ void getBk(double* Bk,fftw_complex* delta_k,int nside,int* ks,int numks){
             else jj=(j-nside)*(j-nside);
             for(int k=0;k<middleplus1;k++){
                 kabs=(int)(sqrt(ii+jj+k*k)+0.5);
+                if ((kabs-start)%step==0){
+                	kabs=(kabs-start)/step;
+                	if (kabs<numks){
+                		ind=yzsize*i+middleplus1*j+k;
+                    	partialdelta_ks[kabs*csize+ind][0]+=delta_k[ind][0];
+                    	partialdelta_ks[kabs*csize+ind][1]+=delta_k[ind][1];
+                	}
+                }
+                /*
                 if (kabs<numks){
                     ind=yzsize*i+middleplus1*j+k;
                     partialdelta_ks[kabs*csize+ind][0]+=delta_k[ind][0];
                     partialdelta_ks[kabs*csize+ind][1]+=delta_k[ind][1];
                     //memcpy(partialdelta_ks+kabs*csize+yzsize*i+middleplus1*j+k,delta_k+yzsize*i+middleplus1*j+k,sizeof(fftw_complex));
-                }     
-            }
+                */
+            }     
         }
     }
-    /*
-    std::cout<<"HI3"<<std::endl;
-    std::ofstream file;
-    file.open("TEST");
-    file.write((char*)partialdelta_ks, sizeof(fftw_complex)*numks*csize);
-    file.close();
-    free(partialdelta_ks);
-    */
+    
+    //std::cout<<"got"<<std::endl;
 
-    std::cout<<"T1"<<std::endl;
-    double* partialdeltas=new double[(nside/2+1)*size];
-    double* partialcounts=new double[(nside/2+1)*size];
-
+    if (!quiet) std::cout<<"  FFT k-rings"<<std::endl;
+    double* partialdeltas=new double[numks*size];
+    double* partialcounts=new double[numks*size];
     int n[]={nside,nside,nside};
     
     #ifdef _OPENMP
@@ -239,12 +264,12 @@ void getBk(double* Bk,fftw_complex* delta_k,int nside,int* ks,int numks){
     #ifdef _OPENMP
     fftw_plan_with_nthreads(omp_get_max_threads());
     #endif
+    
     p=fftw_plan_many_dft_c2r(3,n,numks
         ,partialdelta_ks,NULL,1,csize
         ,partialdeltas,NULL,1,size
         ,FFTW_ESTIMATE);
     fftw_execute(p);
-    std::cout<<"T2"<<std::endl;
     //Now the counts reuse same array for memory
     memset(partialdelta_ks, 0,sizeof(fftw_complex)*numks*csize);
 
@@ -258,15 +283,15 @@ void getBk(double* Bk,fftw_complex* delta_k,int nside,int* ks,int numks){
         for (int j=0;j<nside;j++){
             if (j<middleplus1) jj=j*j;
             else jj=(j-nside)*(j-nside);
-            for(int k=0;k<middleplus1;k++){
+            for(int k=0;k<middleplus1;k++){  
                 kabs=(int)(sqrt(ii+jj+k*k)+0.5);
-                if (kabs<numks){
-                    partialdelta_ks[kabs*csize+yzsize*i+middleplus1*j+k][0]=1;
-                }     
+                if ((kabs-start)%step==0){
+                	kabs=(kabs-start)/step;
+                	if (kabs<numks) partialdelta_ks[kabs*csize+yzsize*i+middleplus1*j+k][0]=1;
+                }
             }
         }
     }
-
     p=fftw_plan_many_dft_c2r(3,n,numks
         ,partialdelta_ks,NULL,1,csize
         ,partialcounts,NULL,1,size
@@ -276,25 +301,41 @@ void getBk(double* Bk,fftw_complex* delta_k,int nside,int* ks,int numks){
     //free
     fftw_destroy_plan(p);
     free(partialdelta_ks);
-    std::cout<<"T3"<<std::endl;
+    if (!quiet) std::cout<<"  Sum over realspace"<<std::endl;
 
-    
+    /*
+    //Change to val array
 
-    #ifdef _OPENMP
-    #pragma omp parallel for
-    #endif
+	std::valarray<double> partialdeltasv[numks];
+	//partialdeltasv=new valarray<double>[numks];
+	
+	for(int i=0;i<numks;i++){
+		partialdeltasv[i]=std::valarray<double>(partialdeltas+i*size,size);
+	}
+	//free(partialdeltas);
+
+	std::valarray<double> partialcountsv[numks];
+	for(int i=0;i<numks;i++){
+		partialcountsv[i]=std::valarray<double>(partialcounts+i*size,size);
+	}
+	//free(partialcounts);
+	*/
+
+
     for(int i=0;i<numks;i++){
         //int multi=1;
         double deltasum,countsum;
         int ind;
         double* partialproddelta=new double[size];
         double* partialprodcount=new double[size];
+        
         for(int j=0;j<i+1;j++){
-
+        	
             for(int sumind=0;sumind<size;sumind++){
                 partialproddelta[sumind]=partialdeltas[i*size+sumind]*partialdeltas[j*size+sumind];
                 partialprodcount[sumind]=partialcounts[i*size+sumind]*partialcounts[j*size+sumind];
             }
+            
 
             for(int k=i-j;k<j+1;k++){
                 /*
@@ -304,159 +345,50 @@ void getBk(double* Bk,fftw_complex* delta_k,int nside,int* ks,int numks){
                 }
                 else if ((j==k)or(i==k)) multi=2;
                 */
+                
                 deltasum=0;
                 countsum=0;
+                
+                #ifdef _OPENMP
+    			#pragma omp parallel for
+    			#endif
                 for(int sumind=0;sumind<size;sumind++){
                     deltasum+=partialproddelta[sumind]*partialdeltas[k*size+sumind];
                     countsum+=partialprodcount[sumind]*partialcounts[k*size+sumind];
                 }
-                ind=to1dind(ks[i],ks[j],ks[k],ny);
-                if (countsum!=0) Bk[ind]+=deltasum/countsum;
+                
+                //deltasum = (partialdeltasv[i] * partialdeltasv[j]*partialdeltasv[k]).sum();
+                //countsum = (partialcountsv[i] * partialcountsv[j]*partialcountsv[k]).sum();
+
+                ind=to1dind(i,j,k,ny);
+                if (countsum!=0.0) Bk[ind]+=deltasum/countsum;
 
             }
         }
+        
         free(partialproddelta);
         free(partialprodcount);
+        
     }
-    std::cout<<"T4"<<std::endl;
-
-
-
-    /*
-    double *delta;
-    delta = (double*) fftw_malloc(sizeof(double)*size);
-    #ifdef _OPENMP
-    fftw_init_threads();
-    #endif
-    fftw_plan p;
-    #ifdef _OPENMP
-    fftw_plan_with_nthreads(omp_get_max_threads());
-    #endif
-    p = fftw_plan_dft_c2r_3d(nside,nside,nside, delta_k, delta,FFTW_ESTIMATE);
-    fftw_execute(p);
-    fftw_destroy_plan(p);
-    */
-/*
-    int* counts=new int[(nside/2+1)*(nside/2+1)];
-    int* kabsarr=new int[nside*nside*(nside/2+1)];
-    memset(counts, 0,(nside/2+1)*(nside/2+1)*sizeof(int));
-
-    #ifdef _OPENMP
-    #pragma omp parallel for
-    #endif
-    for (int i=0;i<nside;i++){
-        int ii,jj;
-        if (i<middleplus1) ii=i*i;
-        else ii=(i-nside)*(i-nside);
-        for (int j=0;j<nside;j++){
-            if (j<middleplus1) jj=j*j;
-            else jj=(j-nside)*(j-nside);
-            for(int k=0;k<middleplus1;k++){
-                kabsarr[yzsize*i+middleplus1*j+k]=(int)(sqrt(ii+jj+k*k)+0.5);
-            }
-        }
-    }
-
-    #ifdef _OPENMP
-    #pragma omp parallel for
-    #endif
-    for (int i1=0;i1<nside;i1++){
-        int ind1,ind2,ind3;
-        int k_abs1,k_abs2;
-        int ii1,jj1,ii2,jj2,ii3,jj3;
-        if (i1<middleplus1){
-            ii1=i1;
-        }else{
-            ii1=(i1-nside);
-        }
-
-        for (int j1=0;j1<nside;j1++){
-            if (j1<middleplus1){
-                jj1=j1;
-            }else{
-                jj1=(j1-nside);
-            }
-            if (kabsarr[yzsize*i1+middleplus1*j1+0]>middleplus1) continue;
-
-            for(int k1=0;k1<middleplus1;k1++){
-                ind1=yzsize*i1+middleplus1*j1+k1;
-                k_abs1=kabsarr[yzsize*i1+middleplus1*j1+k1];
-
-                if (k_abs1>middleplus1) continue;
-                for (int i2=0;i2<nside;i2++){
-                    if (i2<middleplus1){
-                        ii2=i2;
-                    }else{
-                        ii2=(i2-nside);
-                    }
-                    for (int j2=0;j2<nside;j2++){
-                        if (j2<middleplus1){
-                            jj2=j2;
-                        }else{
-                            jj2=(j2-nside);
-                        }
-
-
-                        for(int k2=0;k2<middleplus1;k2++){
-                            ind2=yzsize*i2+middleplus1*j2+k2;
-                            ii3=ii1+ii2;
-                            if ((ii3<-middleplus1)||(ii3>middleplus1)) continue;
-                            if (ii3<0){
-                                ii3=nside+ii3;
-                            }
-                            jj3=jj1+jj2;
-                            if ((jj3<-middleplus1)||(jj3>middleplus1))  continue;
-                            if (jj3<0){
-                                jj3=nside+jj3;
-                            }
-                            if ((k1+k2)>middleplus1) continue;
-
-
-                            ind3=yzsize*(ii3)+middleplus1*(jj3)+(k1+k2);
-                            
-                            k_abs2=kabsarr[yzsize*i2+middleplus1*j2+k2];
-                            if ((k_abs1+k_abs2)<middleplus1){
-                                Bk[k_abs1*middleplus1+k_abs2]+=delta_k[ind3][0]*(delta_k[ind1][0]*delta_k[ind2][0]-delta_k[ind1][1]*delta_k[ind2][1])+delta_k[ind3][1]*(delta_k[ind1][0]*delta_k[ind2][1]+delta_k[ind1][1]*delta_k[ind2][0]);
-                                counts[k_abs1*middleplus1+k_abs2]+=1;
-                            }
-
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    #ifdef _OPENMP
-    #pragma omp parallel for
-    #endif
-    for (int i=0;i<middleplus1;i++){
-        for (int j=0;j<middleplus1;j++){
-            if (counts[i*middleplus1+j]!=0){
-                Bk[i*middleplus1+j]/=counts[i*middleplus1+j];
-            }
-        }
-    }
-
-    free(counts);
-    free(kabsarr);
-    */
+    if (!quiet) std::cout<<"  Done"<<std::endl;
 }
+
+
 
 inline int flatsize(int ny){
     return (ny+1)*(ny+2)*(ny+3)/6;
 }
 
-int* getBk_ind(int nside){
-    int ny=nside/2;
+int* getBk_ind(int nside,int start, int step){
+    int ny=(nside/2-start)/step;
     int* Bkind=new int[3*flatsize(ny)];
     int count=0;
     for(int i=0;i<ny+1;i++){
         for(int j=0;j<i+1;j++){
             for(int k=0;k<j+1;k++){
-                Bkind[3*count]=i;
-                Bkind[3*count+1]=j;
-                Bkind[3*count+2]=k;
+                Bkind[3*count]=i*step+start;
+                Bkind[3*count+1]=j*step+start;
+                Bkind[3*count+2]=k*step+start;
                 count++;
             }
         }

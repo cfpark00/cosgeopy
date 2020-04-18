@@ -18,12 +18,14 @@
 struct timeval now;
 double tm1;
 double t;
+double dt;
 double t0;
 
 void timer(const std::string& Message,bool quiet){
     gettimeofday(&now,NULL);
     t=now.tv_sec+0.000001*now.tv_usec-t0;
-    if (!quiet) std::cout<<" Time: "<<(t-tm1)<<std::endl<<Message<<t;
+    dt=(t-tm1);
+    if (!quiet) std::cout<<" Time: "<<dt<<std::endl<<Message<<t;
     tm1=t;
 }
 
@@ -110,25 +112,31 @@ int main(int argc, char *argv[]){
     }
 
     timer("Start Bk: ",quiet);
-    double* Bk=new double[flatsize(nside/2)];
+    int start=0;
+    int step=20;
+    int fsize=flatsize((nside/2-start)/step);
+    //std::cout<<fsize<<std::endl;
+    double* Bk=new double[fsize];
     int* Bkind;
     if (!getBkinds){
-        Bkind=getBk_ind(nside);
+        Bkind=getBk_ind(nside,start,step);
     }
     else{
         assert(0&&("Not Implemented"));
     }
-    memset(Bk, 0,flatsize(nside/2)*sizeof(double));
-    getBk(Bk,delta_k,nside);
+    memset(Bk, 0,fsize*sizeof(double));
+    getBk(Bk,delta_k,nside,NULL,0,start,step,quiet);
+    timer("Make Stat at: ",quiet);
+    if (!quiet) std::cout<<std::endl<<"  Computed "<<fsize<<" triplets in "<<dt<<". "<<(dt/fsize)<<" per triplet"<<std::endl;
     timer("Start Bk write at: ",quiet);
     std::ofstream fileb(filenameBk);
-    fileb.write((char*)Bk, sizeof(double)*flatsize(nside/2));
+    fileb.write((char*)Bk, sizeof(double)*fsize);
     fileb.close();
     free(Bk);
 
     timer("Start Bkind write at: ",quiet);
     std::ofstream filebi(filenameBkind);
-    filebi.write((char*)Bkind, sizeof(int)*3*flatsize(nside/2));
+    filebi.write((char*)Bkind, sizeof(int)*3*fsize);
     filebi.close();
     free(Bkind);
 
