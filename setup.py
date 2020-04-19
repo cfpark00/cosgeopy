@@ -7,5 +7,5 @@ setuptools.setup(
     author_email="cfpark00@gmail.com",
     description="Cosmological Computations",
     url="https://github.com/cfpark00/Bispec",
-    packages=['cosgeopy']
+    packages=setuptools.find_packages()
 )

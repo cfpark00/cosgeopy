@@ -7,6 +7,13 @@ print("This is \"./src/\" from the default BispecPy.py location")
 
 exdir="./src/"
 
+def set_exdir(path):
+    global exdir
+    if path[-1]!="/":
+        path+="/"
+    exdir=path
+    print("C++ binaries assumed to live in:",exdir)
+
 def fullrun(nside=64,realspace=True,doPk=True,doBk=False
                         ,Pkfilename=""
                         ,filenamek="./src/data/delta_k.dat",filenamePk="./src/data/pk.dat",filenameBk="./src/data/bk.dat"

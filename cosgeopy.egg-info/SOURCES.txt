@@ -1,0 +1,8 @@
+README.md
+setup.py
+cosgeopy/BispecPy.py
+cosgeopy/__init__.py
+cosgeopy.egg-info/PKG-INFO
+cosgeopy.egg-info/SOURCES.txt
+cosgeopy.egg-info/dependency_links.txt
+cosgeopy.egg-info/top_level.txt
