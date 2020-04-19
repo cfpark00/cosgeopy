@@ -1,5 +1,6 @@
-# Bispec
-A Tool to handle cosmological density fields, estimate power spectrum and bispectrum.
+# _cosgeopy_
+Tools to handle cosmological density fields, estimate power spectrum and bispectrum.
+MinfFunc will merge here soon.
 
 ## Prerequisite
 -g++ compiler
