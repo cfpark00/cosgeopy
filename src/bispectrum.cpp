@@ -45,12 +45,16 @@ int main(int argc, char *argv[]){
 	std::string filename("");
     std::string filenameBk("./data/bk.dat");
     std::string filenameBkind("./data/bkinds.dat");
+    int start=0;
+    int step=1;
 	bool quiet=0;
     bool fromrealspace=0;
     bool getBkinds=0;
     while (i<argc){
     	if (!strcmp(argv[i],"-quiet")) quiet=1;
     	else if (!strcmp(argv[i],"-nside")) nside = atoi(argv[++i]);
+    	else if (!strcmp(argv[i],"-start")) start = atoi(argv[++i]);
+    	else if (!strcmp(argv[i],"-step")) step = atoi(argv[++i]);
     	else if (!strcmp(argv[i],"-filename")) filename = argv[++i];
         else if (!strcmp(argv[i],"-fromrealspace")) fromrealspace=1;
         else if (!strcmp(argv[i],"-getBkinds")) getBkinds=1;
@@ -112,8 +116,6 @@ int main(int argc, char *argv[]){
     }
 
     timer("Start Bk: ",quiet);
-    int start=0;
-    int step=20;
     int fsize=flatsize((nside/2-start)/step);
     //std::cout<<fsize<<std::endl;
     double* Bk=new double[fsize];
