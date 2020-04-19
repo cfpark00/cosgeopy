@@ -2,6 +2,10 @@ import numpy as np
 import matplotlib.pyplot as plt
 import subprocess
 import matplotlib.colors as colors
+print("Please set BispecPy.exdir=\"path_to_C++_executables\"")
+print("This is \"./src/\" from the default BispecPy.py location")
+
+exdir="./src/"
 
 def fullrun(nside=64,realspace=True,doPk=True,doBk=False
                         ,Pkfilename=""
@@ -12,7 +16,7 @@ def fullrun(nside=64,realspace=True,doPk=True,doBk=False
     Function creating a Gaussian density field
     
     """
-    arg=["./src/fullrun","-nside",str(nside)]
+    arg=[exdir+"fullrun","-nside",str(nside)]
     arg.append("-Pkfilename")
     arg.append(Pkfilename)
     arg.append("-filenamek")
@@ -48,7 +52,7 @@ def bispectrum(nside=64,filename="./src/data/delta_k.dat",fromrealspace=False
     Function creating a Gaussian density field
     
     """
-    arg=["./src/bispectrum","-nside",str(nside)]
+    arg=[exdir+"bispectrum","-nside",str(nside)]
     arg.append("-filename")
     arg.append(filename)
     arg.append("-filenameBk")
@@ -74,7 +78,7 @@ def powerspectrum(nside=64,filename="./src/data/delta_k.dat",fromrealspace=False
     Function creating a Gaussian density field
     
     """
-    arg=["./src/powerspectrum","-nside",str(nside)]
+    arg=[exdir+"powerspectrum","-nside",str(nside)]
     arg.append("-filename")
     arg.append(filename)
     arg.append("-filenamePk")
@@ -168,6 +172,15 @@ def plotkfield(filename="./src/data/delta_k.dat",nside=-1,z=0):
     plt.title("theta[delta] at k_z="+str(z))
     plt.colorbar()
     plt.show()
+
+def readPk(filename="./src/data/pk.dat",nside=-1,inputPK=None):
+    if nside==-1:
+        assert False, "nside must be specified"
+    if nside%2!=0:
+        assert False, "nside must be even"
+    pk=np.fromfile(filename, dtype=float)
+    assert len(pk)==int(nside/2+1),"Pk length not matching"
+    return pk
 
 def plotPk(filename="./src/data/pk.dat",nside=-1,inputPK=None):
     if nside==-1:
