@@ -143,73 +143,82 @@ def memory_estimate(nside=256,start=0,step=1):
     print("bispectrum_naive")
     print("  -default: {:.2f} GB".format((nside*nside*nside*8*(1+1)+flatsize(nside/2)*8*(1+1/2))/1e9))
 
-def plotrfield(filename="./src/data/delta.dat",nside=-1,z=0):
-	if nside==-1:
-		assert False, "nside must be specified"
-	if nside%2!=0:
-		assert False, "nside must be even"
-	delta=np.fromfile(filename, dtype=float)
-	delta=delta.reshape(nside,nside,nside)
-	plt.figure(figsize=(8,8))
-	plt.imshow(delta[:,:,z].T,origin="below")
-	plt.xlabel("x")
-	plt.ylabel("y")
-	plt.title("Field delta at z="+str(z))
-	plt.colorbar()
-	plt.show()
-
-def plotkfield(filename="./src/data/delta_k.dat",nside=-1,z=0):
+def plotrfield(filename="./src/data/delta.dat",nside=-1,physicalsize=None,z=0):
+    if physicalsize==None:
+        physicalsize=nside
+    else:
+        physicalsize=physicalsize
     if nside==-1:
         assert False, "nside must be specified"
     if nside%2!=0:
         assert False, "nside must be even"
+    delta=np.fromfile(filename, dtype=float)
+    delta=delta.reshape(nside,nside,nside)
+    plt.figure(figsize=(8,8))
+    plt.imshow(delta[:,:,z].T,extent=[0,physicalsize,0,physicalsize],origin="below")
+    plt.xlabel("x [Mpc]")
+    plt.ylabel("y [Mpc]")
+    plt.title("Field delta at z="+str(z)+" [Mpc]")
+    plt.colorbar()
+    plt.show()
+
+def shift(field2dk):
+    halfside=int(field2dk.shape[0]/2)
+    return np.concatenate((np.concatenate((field2dk[halfside:,halfside:],field2dk[:halfside,halfside:]),axis=0)
+        ,np.concatenate((field2dk[halfside:,:halfside],field2dk[:halfside,:halfside]),axis=0)),axis=1)
+
+def plotkfield(filename="./src/data/delta_k.dat",nside=-1,physicalsize=None,z=0):
+    if physicalsize==None:
+        physicalsize=nside
+    else:
+        physicalsize=physicalsize
+    if nside==-1:
+        assert False, "nside must be specified"
+    if nside%2!=0:
+        assert False, "nside must be even"
+    k_ny=2*np.pi*nside/physicalsize/2
     delta_k=np.fromfile(filename, dtype=float)
     delta_k=delta_k.reshape(nside,nside,int(nside/2+1),2)
     plt.figure(figsize=(8,8))
     vmin=np.min(delta_k)
     vmax=np.max(delta_k)
     plt.subplot(221)
-    plt.imshow(delta_k[:,:,z,0].T,origin="below"
+    plt.imshow(shift(delta_k[:,:,z,0]).T,origin="below",extent=[-k_ny,k_ny,-k_ny,k_ny]
         ,norm=colors.SymLogNorm(linthresh=0.03, linscale=0.03,vmin=vmin, vmax=vmax, base=10))
-    plt.xlabel("k_x")
-    plt.ylabel("k_y")
-    plt.title("Re[delta] at k_z="+str(z))
+    plt.xlabel("k_x [1/Mpc]")
+    plt.ylabel("k_y [1/Mpc]")
+    plt.title("Re[delta] at k_z="+str(z)+" [1/Mpc]")
     plt.colorbar()
     plt.subplot(222)
-    plt.imshow(delta_k[:,:,z,1].T,origin="below"
+    plt.imshow(shift(delta_k[:,:,z,1]).T,origin="below",extent=[-k_ny,k_ny,-k_ny,k_ny]
         ,norm=colors.SymLogNorm(linthresh=0.03, linscale=0.03,vmin=vmin, vmax=vmax, base=10))
-    plt.xlabel("k_x")
-    plt.ylabel("k_y")
-    plt.title("Im[delta] at k_z="+str(z))
+    plt.xlabel("k_x [1/Mpc]")
+    plt.ylabel("k_y [1/Mpc]")
+    plt.title("Im[delta] at k_z="+str(z)+" [1/Mpc]")
     plt.colorbar()
     plt.subplot(223)
     abs=(delta_k[:,:,z,0]**2+delta_k[:,:,z,1]**2)
-    plt.imshow(abs.T,origin="below"
+    plt.imshow(shift(abs).T,origin="below",extent=[-k_ny,k_ny,-k_ny,k_ny]
         ,norm=colors.SymLogNorm(linthresh=0.03, linscale=0.03,vmin=np.min(abs), vmax=np.max(abs), base=10))
-    plt.xlabel("k_x")
-    plt.ylabel("k_y")
-    plt.title("ABS[delta]**2 at k_z="+str(z))
+    plt.xlabel("k_x [1/Mpc]")
+    plt.ylabel("k_y [1/Mpc]")
+    plt.title("ABS[delta]**2 at k_z="+str(z)+" [1/Mpc]")
     plt.colorbar()
     plt.subplot(224)
     theta=np.arctan2(delta_k[:,:,z,1],delta_k[:,:,z,0])
-    plt.imshow(theta.T,origin="below"
+    plt.imshow(shift(theta).T,origin="below",extent=[-k_ny,k_ny,-k_ny,k_ny]
         ,norm=colors.SymLogNorm(linthresh=0.03, linscale=0.03,vmin=np.min(theta), vmax=np.max(theta), base=10))
-    plt.xlabel("k_x")
-    plt.ylabel("k_y")
-    plt.title("theta[delta] at k_z="+str(z))
+    plt.xlabel("k_x [1/Mpc]")
+    plt.ylabel("k_y [1/Mpc]")
+    plt.title("theta[delta] at k_z="+str(z)+" [1/Mpc]")
     plt.colorbar()
     plt.show()
 
-def readPk(filename="./src/data/pk.dat",nside=-1,inputPK=None):
-    if nside==-1:
-        assert False, "nside must be specified"
-    if nside%2!=0:
-        assert False, "nside must be even"
-    pk=np.fromfile(filename, dtype=float)
-    assert len(pk)==int(nside/2+1),"Pk length not matching"
-    return pk
-
-def plotPk(filename="./src/data/pk.dat",nside=-1,inputPK=None):
+def plotPk(filename="./src/data/pk.dat",nside=-1,physicalsize=None,inputPK=None):
+    if physicalsize==None:
+        physicalsize=nside
+    else:
+        physicalsize=physicalsize
     if nside==-1:
         assert False, "nside must be specified"
     if nside%2!=0:
@@ -217,17 +226,22 @@ def plotPk(filename="./src/data/pk.dat",nside=-1,inputPK=None):
     pk=np.fromfile(filename, dtype=float)
     assert len(pk)==int(nside/2+1),"Pk length not matching"
     plt.plot(pk,marker="o",label="Estimate")
-    plt.xlabel("k")
+    plt.xlabel("k [1/Mpc]")
     plt.ylabel("P(k)")
     plt.title("Power Spectrum")
     if inputPK=="default":
         ks=np.linspace(0,nside/2,1000)
         plt.plot(ks,(4*(np.sin(ks/4)**2/(ks+1)**2))**2,label="Default Input")
     plt.yscale("log")
+    plt.xscale("log")
     plt.legend()
     plt.show()
 
-def plotBk(filenameBk="./src/data/bk.dat",filenameBkind="./src/data/bkinds.dat",nside=-1):
+def plotBk(filenameBk="./src/data/bk.dat",filenameBkind="./src/data/bkinds.dat",nside=-1,physicalsize=None):
+    if physicalsize==None:
+        physicalsize=nside
+    else:
+        physicalsize=physicalsize
     if nside==-1:
         assert False, "nside must be specified"
     if nside%2!=0:
@@ -256,6 +270,19 @@ def plotBk(filenameBk="./src/data/bk.dat",filenameBkind="./src/data/bkinds.dat",
     plt.title("Bispectrum")
     plt.show()
 
+def handleunits(data,mode,nside,physicalsize):
+    if mode=="Pk":
+        ks=data[0]
+        Pk=data[1]
+        k_ny=(2*np.pi)*nside/physicalsize
+        return ks/(nside//2)*k_ny,Pk*(physicalsize/nside**2)**3
+    if mode=="Bk":
+        Bkind=data[0]
+        Bk=data[1]
+        k_ny=(2*np.pi)*nside/physicalsize
+        return Bkind/(nside//2)*k_ny,Bk*(physicalsize/nside**3)**3
+    if mode=="k":
+        return data*(physicalsize/nside)**3
 
 import os
 import shutil
@@ -270,8 +297,12 @@ if not os.path.exists(datafolder):
     os.makedirs(datafolder)
 
 class field():
-    def __init__(self,data,nside,folname=None,copy=True):
+    def __init__(self,data,nside,physicalsize=None,folname=None,copy=True):
         global datafolder,fieldcount
+        if physicalsize==None:
+            self.physicalsize=nside
+        else:
+            self.physicalsize=physicalsize
         if folname is None:
             self.folpath=datafolder+"/"+"dataset_"+str(fieldcount)+"/"
             fieldcount+=1
@@ -325,7 +356,6 @@ class field():
         if bkindname is None:
             bkindname="bkind.dat"
         self.bkindpath=self.folpath+bkindname
-        st=time.time()
         try:
             self.deltakpath
         except:
@@ -342,15 +372,12 @@ class field():
                 ,filenameBk=self.bkpath,filenameBkind=self.bkindpath
                 ,quiet=quiet,n_thread=n_thread,only_command=only_command)
             """
-        if res is None:
-            self.writetoreadme(str(st-time.time())+"s for bispectrum"+"\n")
         return res
 
     def compute_powerspectrum(self,pkname=None,quiet=False,n_thread=None,only_command=False):
         if pkname is None:
             pkname="pk.dat"
         self.pkpath=self.folpath+pkname
-        st=time.time()
         try:
             self.deltakpath
         except:
@@ -365,25 +392,23 @@ class field():
             res=powerspectrum(nside=self.nside,filename=self.deltapath,fromrealspace=True
                 ,filenamePk=self.pkpath,quiet=quiet,n_thread=n_thread,only_command=only_command)
             """
-        if res is None:
-            self.writetoreadme(str(st-time.time())+"s for bispectrum"+"\n")
         return res
 
     def plot(self,select="r",z=0):
         if select=="r":
-            plotrfield(filename=self.deltapath,nside=self.nside,z=0)
+            plotrfield(filename=self.deltapath,nside=self.nside,physicalsize=self.physicalsize,z=0)
         if select=="k":
             try:
                 self.deltakpath
             except:
                 self.compute_fft3d()
-            plotkfield(filename=self.deltakpath,nside=self.nside,z=0)
+            plotkfield(filename=self.deltakpath,nside=self.nside,physicalsize=self.physicalsize,z=0)
         if select=="Pk":
             try:
                 self.pkpath
             except:
                 self.compute_powerspectrum()
-            plotPk(filename=self.pkpath,nside=self.nside)
+            plotPk(filename=self.pkpath,nside=self.nside,physicalsize=self.physicalsize)
         if select=="Bk":
             try:
                 self.bkpath
@@ -391,9 +416,9 @@ class field():
             except:
                 assert False, "Compute Bispectrum"
                 #self.compute_bispectrum() #No due to memory
-            plotBk(filenameBk=self.bkpath,filenameBkind=self.bkindpath,nside=self.nside)
+            plotBk(filenameBk=self.bkpath,filenameBkind=self.bkindpath,nside=self.nside,physicalsize=self.physicalsize)
 
-    def data(self,select="r"):
+    def data(self,select="r",units="Physical"):
         """
         Options:
           - r: realspace field
@@ -401,13 +426,43 @@ class field():
           - Pk: Powerspectrum (ks,Pk)
           - Bk: Bispectrum (Bkinds,Bk)
         """
-        if select=="r":
-            return np.fromfile(self.deltapath,dtype=np.float64).reshape(self.nside,self.nside,self.nside)
-        if select=="k":
-            return np.fromfile(self.deltakpath,dtype=np.float64).reshape(self.nside,self.nside,int(self.nside/2+1),2)
-        if select=="Pk":
-            return (None,np.fromfile(self.pkpath, dtype=float))
-        if select=="Bk":
-            #change units
-            return (np.fromfile(self.bkindpath, dtype=np.int32).reshape(fs,3)
-                ,np.fromfile(self.bkpath, dtype=np.float64))
+        if units=="Physical":
+            if select=="r":
+                return np.fromfile(self.deltapath,dtype=np.float64).reshape(self.nside,self.nside,self.nside)
+            if select=="k":
+                return handleunits(np.fromfile(self.deltakpath,dtype=np.float64).reshape(self.nside,self.nside,int(self.nside/2+1),2)
+                    ,mode=select,nside=self.nside,physicalsize=self.physicalsize)
+            if select=="Pk":
+                return handleunits((np.linspace(0,self.nside/2,self.nside//2+1),np.fromfile(self.pkpath, dtype=float))
+                    ,mode=select,nside=self.nside,physicalsize=self.physicalsize)
+            if select=="Bk":
+                #change units
+                return handleunits((np.fromfile(self.bkindpath, dtype=np.int32).reshape(fs,3)
+                    ,np.fromfile(self.bkpath, dtype=np.float64))
+                ,mode=select,nside=self.nside,physicalsize=self.physicalsize)
+        elif units=="Raw":
+            if select=="r":
+                return np.fromfile(self.deltapath,dtype=np.float64).reshape(self.nside,self.nside,self.nside)
+            if select=="k":
+                return np.fromfile(self.deltakpath,dtype=np.float64).reshape(self.nside,self.nside,int(self.nside/2+1),2)
+            if select=="Pk":
+                return (np.linspace(0,self.nside/2,self.nside//2+1),np.fromfile(self.pkpath, dtype=float))
+            if select=="Bk":
+                #change units
+                return (np.fromfile(self.bkindpath, dtype=np.int32).reshape(fs,3)
+                    ,np.fromfile(self.bkpath, dtype=np.float64))
+
+"""
+def readPk(filename="./src/data/pk.dat",nside=-1,physicalsize=None,inputPK=None):
+    if physicalsize==None:
+        self.physicalsize=nside
+    else:
+        self.physicalsize=physicalsize
+    if nside==-1:
+        assert False, "nside must be specified"
+    if nside%2!=0:
+        assert False, "nside must be even"
+    pk=np.fromfile(filename, dtype=float)
+    assert len(pk)==int(nside/2+1),"Pk length not matching"
+    return pk
+"""
