@@ -13,16 +13,16 @@ def set_exdir(path):
         path+="/"
     exdir=path
     print("C++ binaries assumed to live in:",exdir)
-
+"""
 def fullrun(nside=64,realspace=True,doPk=True,doBk=False
                         ,Pkfilename=""
                         ,filenamek="./src/data/delta_k.dat",filenamePk="./src/data/pk.dat",filenameBk="./src/data/bk.dat"
                         ,filenamer="./src/data/delta.dat"
                         ,quiet=False,n_thread=None,only_command=False):
-    """
-    Function creating a Gaussian density field
+
+    #Function creating a Gaussian density field
     
-    """
+
     arg=[exdir+"fullrun","-nside",str(nside)]
     arg.append("-Pkfilename")
     arg.append(Pkfilename)
@@ -51,25 +51,34 @@ def fullrun(nside=64,realspace=True,doPk=True,doBk=False
         print(" ".join(arg))
         return
     print(subprocess.check_output(arg).decode("utf-8"))
+"""
 
-def bispectrum(nside=64,start=0,step=1,filename="./src/data/delta_k.dat",fromrealspace=False
-    ,filenameBk="./src/data/bk.dat",filenameBkind="./src/data/bkinds.dat"
+def bispectrum(nside=64,k_min=1,k_max=-1,step=1,filename="./src/data/delta_k.dat",fromrealspace=False
+    ,filenameBk="./src/data/bk.dat",filenameBkind="./src/data/bkinds.dat",filenameBkcount="./src/data/bkcount.dat"
                         ,quiet=False,n_thread=None,only_command=False):
     """
     Function creating a Gaussian density field
     
     """
+    if k_max==-1:
+        k_max=nside//2
     arg=[exdir+"bispectrum","-nside",str(nside)]
     arg.append("-filename")
     arg.append(filename)
-    arg.append("-start")
-    arg.append(str(start))
+    arg.append("-k_min")
+    arg.append(str(k_min))
+    arg.append("-k_max")
+    arg.append(str(k_max))
     arg.append("-step")
     arg.append(str(step))
+
     arg.append("-filenameBk")
     arg.append(filenameBk)
     arg.append("-filenameBkind")
     arg.append(filenameBkind)
+    arg.append("-filenameBkcount")
+    arg.append(filenameBkcount)
+    
     if fromrealspace:
         arg.append("-fromrealspace")
     if quiet:
@@ -82,8 +91,8 @@ def bispectrum(nside=64,start=0,step=1,filename="./src/data/delta_k.dat",fromrea
         return
     print(subprocess.check_output(arg).decode("utf-8"))
 
-def powerspectrum(nside=64,filename="./src/data/delta_k.dat",fromrealspace=False
-    ,filenamePk="./src/data/pk.dat"
+def powerspectrum(nside=64,filename="./src/data/delta_k.dat",fromrealspace=False,mas=0
+    ,filenameks="./src/data/ks.dat",filenamePk="./src/data/pk.dat"
                         ,quiet=False,n_thread=None,only_command=False):
     """
     Function creating a Gaussian density field
@@ -94,6 +103,10 @@ def powerspectrum(nside=64,filename="./src/data/delta_k.dat",fromrealspace=False
     arg.append(filename)
     arg.append("-filenamePk")
     arg.append(filenamePk)
+    arg.append("-filenameks")
+    arg.append(filenameks)
+    arg.append("-mas")
+    arg.append(str(mas))
     if fromrealspace:
         arg.append("-fromrealspace")
     if quiet:
@@ -121,15 +134,34 @@ def fft3d(nside,inverse=False,filename="",filenamek="",n_thread=None,only_comman
         print(" ".join(arg))
         return
     print(subprocess.check_output(arg).decode("utf-8"))
-
+"""
 def flatsize(ny):
+    c=0
+    for i in range(1,int(ny)+1):
+        for j in range(1,i+1):
+            for k in range(max(i-j,1),j+1):
+                c+=1
+    return c
     return int((ny+1)*(ny+2)*(ny+3)/6)
-    
-def memory_estimate(nside=256,start=0,step=1):
+"""
+def flatsize(k_min,k_max):
+    c=0
+    for i in range(k_min,k_max+1):
+        for j in range(k_min,i+1):
+            for k in range(k_min,j+1):
+                if (k<(i-j)):
+                    continue
+                c+=1
+    return c
+
+
+def memory_estimate(nside=256,k_min=1,k_max=-1,step=1):
     print("These are rough estimates for nside="+str(nside))
     print()
-    numks=(nside/2-start)//step+1
-    fsize=flatsize(numks-1)
+    if k_max==-1:
+        k_max=nside//2
+    fsize=flatsize(k_min,k_max)
+    numks=k_max//step-k_min//step
     print("fullrun")
     print("  -default: {:.2f} GB".format((nside*nside*nside*8*(1+1))/1e9))
     print("  -realspace: {:.2f} GB".format((nside*nside*nside*8*(1+1+1+1/2))/1e9))
@@ -138,10 +170,10 @@ def memory_estimate(nside=256,start=0,step=1):
     print("  -realspace: {:.2f} GB".format((nside*nside*nside*8*(1+1+1))/1e9))
     print("powerspectrum")
     print("  -default: {:.2f} GB".format((nside*nside*nside*8)/1e9))
-    print("bispectrum for",numks,"ks, thus",flatsize(numks-1),"triplets.")
-    print("  -default: {:.2f} GB".format((nside*nside*nside*8+nside*nside*nside*(numks)*8*(1+1+1)+fsize*8*(1+1/2))/1e9))
-    print("bispectrum_naive")
-    print("  -default: {:.2f} GB".format((nside*nside*nside*8*(1+1)+flatsize(nside/2)*8*(1+1/2))/1e9))
+    print("bispectrum for",numks,"ks, thus",fsize,"triplets.")
+    print("  -default: {:.2f} GB".format((nside*nside*nside*8+nside*nside*nside*(numks+1)*8*(1+1+1)+fsize*8*(1+1/2))/1e9))
+    #print("bispectrum_naive")
+    #print("  -default: {:.2f} GB".format((nside*nside*nside*8*(1+1)+flatsize(nside//2)*8*(1+1/2))/1e9))
 
 def plotrfield(filename="./src/data/delta.dat",nside=-1,physicalsize=None,z=0):
     if physicalsize==None:
@@ -167,7 +199,7 @@ def shift(field2dk):
     return np.concatenate((np.concatenate((field2dk[halfside:,halfside:],field2dk[:halfside,halfside:]),axis=0)
         ,np.concatenate((field2dk[halfside:,:halfside],field2dk[:halfside,:halfside]),axis=0)),axis=1)
 
-def plotkfield(filename="./src/data/delta_k.dat",nside=-1,physicalsize=None,z=0):
+def plotkfield(filename="./src/data/delta_k.dat",nside=-1,physicalsize=None,k_z=0):
     if physicalsize==None:
         physicalsize=nside
     else:
@@ -182,19 +214,20 @@ def plotkfield(filename="./src/data/delta_k.dat",nside=-1,physicalsize=None,z=0)
     plt.figure(figsize=(8,8))
     vmin=np.min(delta_k)
     vmax=np.max(delta_k)
+    z=k_z#nside-k_z if k_z<0 else k_z+nside//2
     plt.subplot(221)
     plt.imshow(shift(delta_k[:,:,z,0]).T,origin="below",extent=[-k_ny,k_ny,-k_ny,k_ny]
         ,norm=colors.SymLogNorm(linthresh=0.03, linscale=0.03,vmin=vmin, vmax=vmax, base=10))
     plt.xlabel("k_x [1/Mpc]")
     plt.ylabel("k_y [1/Mpc]")
-    plt.title("Re[delta] at k_z="+str(z)+" [1/Mpc]")
+    plt.title("Re[delta] at k_z="+str(k_z)+" [1/Mpc]")
     plt.colorbar()
     plt.subplot(222)
     plt.imshow(shift(delta_k[:,:,z,1]).T,origin="below",extent=[-k_ny,k_ny,-k_ny,k_ny]
         ,norm=colors.SymLogNorm(linthresh=0.03, linscale=0.03,vmin=vmin, vmax=vmax, base=10))
     plt.xlabel("k_x [1/Mpc]")
     plt.ylabel("k_y [1/Mpc]")
-    plt.title("Im[delta] at k_z="+str(z)+" [1/Mpc]")
+    plt.title("Im[delta] at k_z="+str(k_z)+" [1/Mpc]")
     plt.colorbar()
     plt.subplot(223)
     abs=(delta_k[:,:,z,0]**2+delta_k[:,:,z,1]**2)
@@ -202,7 +235,7 @@ def plotkfield(filename="./src/data/delta_k.dat",nside=-1,physicalsize=None,z=0)
         ,norm=colors.SymLogNorm(linthresh=0.03, linscale=0.03,vmin=np.min(abs), vmax=np.max(abs), base=10))
     plt.xlabel("k_x [1/Mpc]")
     plt.ylabel("k_y [1/Mpc]")
-    plt.title("ABS[delta]**2 at k_z="+str(z)+" [1/Mpc]")
+    plt.title("ABS[delta]**2 at k_z="+str(k_z)+" [1/Mpc]")
     plt.colorbar()
     plt.subplot(224)
     theta=np.arctan2(delta_k[:,:,z,1],delta_k[:,:,z,0])
@@ -210,11 +243,11 @@ def plotkfield(filename="./src/data/delta_k.dat",nside=-1,physicalsize=None,z=0)
         ,norm=colors.SymLogNorm(linthresh=0.03, linscale=0.03,vmin=np.min(theta), vmax=np.max(theta), base=10))
     plt.xlabel("k_x [1/Mpc]")
     plt.ylabel("k_y [1/Mpc]")
-    plt.title("theta[delta] at k_z="+str(z)+" [1/Mpc]")
+    plt.title("theta[delta] at k_z="+str(k_z)+" [1/Mpc]")
     plt.colorbar()
     plt.show()
 
-def plotPk(filename="./src/data/pk.dat",nside=-1,physicalsize=None,inputPK=None):
+def plotPk(filenameks="./src/data/ks.dat",filenamePk="./src/data/pk.dat",nside=-1,physicalsize=None,inputPK=None):
     if physicalsize==None:
         physicalsize=nside
     else:
@@ -223,21 +256,21 @@ def plotPk(filename="./src/data/pk.dat",nside=-1,physicalsize=None,inputPK=None)
         assert False, "nside must be specified"
     if nside%2!=0:
         assert False, "nside must be even"
-    pk=np.fromfile(filename, dtype=float)
-    assert len(pk)==int(nside/2+1),"Pk length not matching"
-    plt.plot(pk,marker="o",label="Estimate")
+    pk=np.fromfile(filenamePk, dtype=float)
+    ks=np.fromfile(filenameks, dtype=float)
+    ks,pk=handleunits((ks,pk),mode="Pk",nside=nside,physicalsize=physicalsize)
+    plt.plot(ks,pk,marker="o",label="Estimate")
     plt.xlabel("k [1/Mpc]")
     plt.ylabel("P(k)")
     plt.title("Power Spectrum")
     if inputPK=="default":
-        ks=np.linspace(0,nside/2,1000)
         plt.plot(ks,(4*(np.sin(ks/4)**2/(ks+1)**2))**2,label="Default Input")
     plt.yscale("log")
     plt.xscale("log")
     plt.legend()
     plt.show()
 
-def plotBk(filenameBk="./src/data/bk.dat",filenameBkind="./src/data/bkinds.dat",nside=-1,physicalsize=None):
+def plotBk(filenameBk="./src/data/bk.dat",filenameBkind="./src/data/bkinds.dat",filenameBkcount="./src/data/bkcount.dat",nside=-1,physicalsize=None,args={},**kwargs):
     if physicalsize==None:
         physicalsize=nside
     else:
@@ -247,23 +280,21 @@ def plotBk(filenameBk="./src/data/bk.dat",filenameBkind="./src/data/bkinds.dat",
     if nside%2!=0:
         assert False, "nside must be even"
 
+    bkind,bk,bkcount=handleunits((np.fromfile(filenameBkind, dtype=np.int32),np.fromfile(filenameBk, dtype=np.float64)
+        ,np.fromfile(filenameBkcount, dtype=np.float64)),mode="Bk",nside=nside,physicalsize=physicalsize)
+    bkind=bkind.reshape(-1,3)
 
-    fs=flatsize(nside//2)
-    bk=np.fromfile(filenameBk, dtype=np.float64)
-    bkind=np.fromfile(filenameBkind, dtype=np.int32)
-    bkind=bkind.reshape(fs,3)
-    #print(bkind)
-
-    im=np.zeros((nside//2+1,nside//2+1))
-    count=np.zeros((nside//2+1,nside//2+1))
-    for ind,onebk in zip(bkind,bk):
-        if ind[0]==0 or ind[2]<(ind[0]-ind[1]):
-            continue
-        im[int(nside//2*ind[2]/ind[0]+0.5),int(nside//2*ind[1]/ind[0]+0.5)]+=onebk
-        count[int(nside//2*ind[2]/ind[0]+0.5),int(nside//2*ind[1]/ind[0]+0.5)]+=1
-    imshowfield=np.divide(im,count,out=np.zeros_like(im),where=count!=0)
+    res=20
+    if "res" in args:
+        res=args["res"]
+    im=np.zeros((res+1,res+1))
+    counts=np.zeros((res+1,res+1))
+    for ind,onebk,count in zip(bkind,bk,bkcount):
+        im[int(res*ind[2]/ind[0]+0.5),int(res*ind[1]/ind[0]+0.5)]+=onebk*count
+        counts[int(res*ind[2]/ind[0]+0.5),int(res*ind[1]/ind[0]+0.5)]+=count
+    imshowfield=np.divide(im,counts,out=np.zeros_like(im),where=counts!=0)
     plt.imshow(imshowfield.T,origin="below"
-        ,norm=colors.SymLogNorm(linthresh=0.03, linscale=0.03,vmin=np.min(imshowfield), vmax=np.max(imshowfield), base=10))
+    ,norm=colors.SymLogNorm(linthresh=0.03, linscale=0.03,vmin=np.min(imshowfield), vmax=np.max(imshowfield), base=10),**kwargs)
     plt.colorbar()
     plt.xlabel("k3/k1")
     plt.ylabel("k2/k1")
@@ -274,13 +305,14 @@ def handleunits(data,mode,nside,physicalsize):
     if mode=="Pk":
         ks=data[0]
         Pk=data[1]
-        k_ny=(2*np.pi)*nside/physicalsize
-        return ks/(nside//2)*k_ny,Pk*(physicalsize/nside**2)**3
+        k_ny=(2*np.pi)*nside/physicalsize/2
+        return ks/(nside//2)*k_ny,Pk*((physicalsize**3)**(2-1)/(nside**3)**2)
     if mode=="Bk":
         Bkind=data[0]
         Bk=data[1]
-        k_ny=(2*np.pi)*nside/physicalsize
-        return Bkind/(nside//2)*k_ny,Bk*(physicalsize/nside**3)**3
+        Bkcount=data[2]
+        k_ny=(2*np.pi)*nside/physicalsize/2
+        return Bkind/(nside//2)*k_ny,Bk*((physicalsize**3)**(3-1)/(nside**3)**3),Bkcount
     if mode=="k":
         return data*(physicalsize/nside)**3
 
@@ -297,8 +329,22 @@ if not os.path.exists(datafolder):
     os.makedirs(datafolder)
 
 class field():
-    def __init__(self,data,nside,physicalsize=None,folname=None,copy=True):
+    def __init__(self,data,nside,physicalsize=None,folname=None,copy=True,existing=False):
         global datafolder,fieldcount
+        if existing:
+            self.folpath=datafolder+"/"+folname+"/"
+            self.physicalsize=physicalsize
+            self.nside=nside
+            self.readmepath=self.folpath+"readme.md"
+            self.deltapath=self.folpath+"delta.dat"
+            self.deltakpath=self.folpath+"delta_k.dat"
+            self.bkindpath=self.folpath+"bkind.dat"
+            self.bkcountpath=self.folpath+"bkcount.dat"
+            self.bkpath=self.folpath+"bk.dat"
+            self.pkpath=self.folpath+"pk.dat"
+            self.kspath=self.folpath+"ks.dat"
+            return
+        
         if physicalsize==None:
             self.physicalsize=nside
         else:
@@ -349,43 +395,48 @@ class field():
             assert False, "No delta_k"
         self.deltapath=self.folpath+"delta.dat"
         fft3d(self.nside,inverse=True,filename=self.deltapath,filenamek=self.deltakpath)
-    def compute_bispectrum(self,bkname=None,bkindname=None,start=0,step=1,quiet=False,n_thread=None,only_command=False):
+    def compute_bispectrum(self,bkname=None,bkindname=None,bkcountname=None,k_min=1,k_max=-1,step=1,quiet=False,n_thread=None,only_command=False):
+        if k_max==-1:
+            k_max=nside//2
         if bkname is None:
             bkname="bk.dat"
         self.bkpath=self.folpath+bkname
         if bkindname is None:
             bkindname="bkind.dat"
         self.bkindpath=self.folpath+bkindname
+        if bkcountname is None:
+            bkcountname="bkcount.dat"
+        self.bkcountpath=self.folpath+bkcountname
         try:
             self.deltakpath
         except:
             self.compute_fft3d()
         try:
             self.deltakpath
-            res=bispectrum(nside=self.nside,start=start,step=step,filename=self.deltakpath,fromrealspace=False
-                ,filenameBk=self.bkpath,filenameBkind=self.bkindpath
+            res=bispectrum(nside=self.nside,k_min=k_min,k_max=k_max,step=step,filename=self.deltakpath,fromrealspace=False
+                ,filenameBk=self.bkpath,filenameBkind=self.bkindpath,filenameBkcount=self.bkcountpath
                 ,quiet=quiet,n_thread=n_thread,only_command=only_command)
+            self.k_min=k_min
+            self.k_max=k_max
         except:
             assert False,"This should not happen"
-            """
-            res=bispectrum(nside=self.nside,start=start,step=step,filename=self.deltapath,fromrealspace=True
-                ,filenameBk=self.bkpath,filenameBkind=self.bkindpath
-                ,quiet=quiet,n_thread=n_thread,only_command=only_command)
-            """
         return res
 
-    def compute_powerspectrum(self,pkname=None,quiet=False,n_thread=None,only_command=False):
+    def compute_powerspectrum(self,mas=0,ksname=None,pkname=None,quiet=False,n_thread=None,only_command=False):
         if pkname is None:
             pkname="pk.dat"
         self.pkpath=self.folpath+pkname
+        if ksname is None:
+            ksname="ks.dat"
+        self.kspath=self.folpath+ksname
         try:
             self.deltakpath
         except:
             self.compute_fft3d()
         try:
             self.deltakpath
-            res=powerspectrum(nside=self.nside,filename=self.deltakpath,fromrealspace=False
-                ,filenamePk=self.pkpath,quiet=quiet,n_thread=n_thread,only_command=only_command)
+            res=powerspectrum(nside=self.nside,filename=self.deltakpath,fromrealspace=False,mas=mas
+                ,filenameks=self.kspath,filenamePk=self.pkpath,quiet=quiet,n_thread=n_thread,only_command=only_command)
         except:
             assert False,"This should not happen"
             """
@@ -394,29 +445,31 @@ class field():
             """
         return res
 
-    def plot(self,select="r",z=0):
+    def plot(self,select="r",z=0,args={},**kwargs):
         if select=="r":
             plotrfield(filename=self.deltapath,nside=self.nside,physicalsize=self.physicalsize,z=0)
         if select=="k":
             try:
                 self.deltakpath
             except:
-                self.compute_fft3d()
-            plotkfield(filename=self.deltakpath,nside=self.nside,physicalsize=self.physicalsize,z=0)
+                assert False, "Compute FFT3D"
+            plotkfield(filename=self.deltakpath,nside=self.nside,physicalsize=self.physicalsize,k_z=z)
         if select=="Pk":
             try:
                 self.pkpath
+                self.kspath
             except:
-                self.compute_powerspectrum()
-            plotPk(filename=self.pkpath,nside=self.nside,physicalsize=self.physicalsize)
+                assert False, "Compute Powerspectrum"
+            plotPk(filenameks=self.kspath,filenamePk=self.pkpath,nside=self.nside,physicalsize=self.physicalsize)
         if select=="Bk":
             try:
                 self.bkpath
                 self.bkindpath
+                self.bkcountpath
             except:
                 assert False, "Compute Bispectrum"
                 #self.compute_bispectrum() #No due to memory
-            plotBk(filenameBk=self.bkpath,filenameBkind=self.bkindpath,nside=self.nside,physicalsize=self.physicalsize)
+            plotBk(filenameBk=self.bkpath,filenameBkind=self.bkindpath,filenameBkcount=self.bkcountpath,nside=self.nside,physicalsize=self.physicalsize,args=args,**kwargs)
 
     def data(self,select="r",units="Physical"):
         """
@@ -433,12 +486,12 @@ class field():
                 return handleunits(np.fromfile(self.deltakpath,dtype=np.float64).reshape(self.nside,self.nside,int(self.nside/2+1),2)
                     ,mode=select,nside=self.nside,physicalsize=self.physicalsize)
             if select=="Pk":
-                return handleunits((np.linspace(0,self.nside/2,self.nside//2+1),np.fromfile(self.pkpath, dtype=float))
+                return handleunits((np.fromfile(self.kspath, dtype=float),np.fromfile(self.pkpath, dtype=float))
                     ,mode=select,nside=self.nside,physicalsize=self.physicalsize)
             if select=="Bk":
                 #change units
-                return handleunits((np.fromfile(self.bkindpath, dtype=np.int32).reshape(fs,3)
-                    ,np.fromfile(self.bkpath, dtype=np.float64))
+                return handleunits((np.fromfile(self.bkindpath, dtype=np.int32).reshape(-1,3)
+                    ,np.fromfile(self.bkpath, dtype=np.float64),np.fromfile(self.bkcountpath, dtype=np.float64))
                 ,mode=select,nside=self.nside,physicalsize=self.physicalsize)
         elif units=="Raw":
             if select=="r":

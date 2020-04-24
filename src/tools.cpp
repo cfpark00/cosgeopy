@@ -127,48 +127,65 @@ void fill_delta_k(fftw_complex* delta_k,int nside,int seed){
     
 }
 
-void getPk(double* Pk,fftw_complex* delta_k,int nside){
+inline double invsinc(double x){
+    if (x==0) return 1.0;
+    else return x/sin(x);
+}
+
+void getPk(double* ks,double* Pk,fftw_complex* delta_k,int nside,int MASexp){
+    int len=(int)(sqrt(3*(nside/2)*(nside/2)))+1;
     int middleplus1=nside/2+1;
     int yzsize=middleplus1*nside;
-    int* counts=new int[nside/2+1];
-    memset(counts, 0,(nside/2+1)*sizeof(int));
+    int* counts=new int[len];
+    memset(counts, 0,(len)*sizeof(int));
 
-    #ifdef _OPENMP
-    #pragma omp parallel for
-    #endif
+
+    //#pragma omp parallel for
+    #pragma omp parallel for reduction(+:ks[0:len],Pk[0:len],counts[0:len])
     for (int i=0;i<nside;i++){
         int ind=0;
+        double k_abs;
         int k_abs_ind;
         int ii,jj;
+        double MASfactorx,MASfactory,factor;
         if (i<middleplus1){
-            ii=i*i;
+            ii=i;
         }else{
-            ii=(nside-i)*(nside-i);
+            ii=(nside-i);
         }
+        MASfactorx=pow(invsinc(M_PI*ii/nside),MASexp);
         for (int j=0;j<nside;j++){
             if (j<middleplus1){
-                jj=j*j;
+                jj=j;
             }else{
-                jj=(nside-j)*(nside-j);
+                jj=(nside-j);
             }
+            MASfactory=pow(invsinc(M_PI*jj/nside),MASexp);
             for(int k=0;k<middleplus1;k++){
                 ind=yzsize*i+middleplus1*j+k;
-                k_abs_ind=(int)(sqrt(ii+jj+k*k)+0.5);
-                if (k_abs_ind<middleplus1){
-                    Pk[k_abs_ind]+=delta_k[ind][0]*delta_k[ind][0]+delta_k[ind][1]*delta_k[ind][1];
-                    counts[k_abs_ind]+=1;
-                }
+                factor=MASfactorx*MASfactory*pow(invsinc(M_PI*k/nside),MASexp);
+                k_abs=sqrt(ii*ii+jj*jj+k*k);
+                k_abs_ind=(int)(k_abs);
+
+                //#pragma omp critical
+                Pk[k_abs_ind]+=(delta_k[ind][0]*delta_k[ind][0]+delta_k[ind][1]*delta_k[ind][1])*factor*factor;
+                //#pragma omp critical
+                counts[k_abs_ind]+=1;
+                //#pragma omp critical
+                ks[k_abs_ind]+=k_abs;
+
             }
         }
     }
-    #ifdef _OPENMP
-    #pragma omp parallel for
-    #endif
-    for (int i=0;i<middleplus1;i++){
-        if (counts[i]!=0) Pk[i]/=counts[i];
+
+    for (int i=0;i<len;i++){
+        if (counts[i]!=0){
+            Pk[i]/=counts[i];
+            ks[i]/=counts[i];
+        }
     }
 
-    free(counts);
+    delete[] counts;
 }
 
 
@@ -176,52 +193,25 @@ inline int to1dind(int a1,int a2, int a3, int d){
     return a1*(a1+1)*(a1+2)/6+(a2)*(a2+1)/2+a3;
 }
 
-void getBk(double* Bk,fftw_complex* delta_k,int nside,int* ks,int numks,int start, int step,bool quiet){
+void getBk(int* Bkind,double* Bk,double* Bkcount,int fsize,fftw_complex* delta_k,int nside,int k_min, int k_max,int step,bool quiet){
     if (!quiet) std::cout<<std::endl<<"  Generate k-rings"<<std::endl;
     int middleplus1=nside/2+1;
     int yzsize=middleplus1*nside;
     int csize=(nside/2+1)*(nside)*(nside);
     int size=nside*nside*nside;
-    int ny=(nside/2-start)/step;
-	//std::cout<<"got"<<std::endl;
+	int numks=k_max-k_min+1;
 
     //Initialize the kbins
     //No adaptive binning yet
-    assert((start>=0)&&("Start is negative"));
-    assert((step>0)&&("Step should be 1 or bigger"));
-
-    if (ks==NULL){
-	    numks=0;
-	    for(int i=0;i<middleplus1;i+=step) numks++;
-
-	    ks=(int*) malloc(sizeof(int)*numks);
-		int count=0;
-	    for(int i=0;i<middleplus1;i+=step,count++) ks[count]=i;
-	    //std::cout<<numks<<std::endl;
-	}
-
-	//std::cout<<numks<<std::endl;
-	
-    /*
-    if (ks==NULL){
-        ks=(int*) malloc(sizeof(int)*(nside/2+1));
-        numks=nside/2+1;
-        for(int i=0;i<numks;i++) ks[i]=i;
-    }
-    else{
-
-    }
-    */
+    //assert((start>=0)&&("Start is negative"));
+    //assert((step>0)&&("Step should be 1 or bigger"));
 
     //Make the k-space rings
     fftw_complex *partialdelta_ks;
     partialdelta_ks = (fftw_complex*) fftw_malloc(sizeof(fftw_complex)*numks*csize);
     memset(partialdelta_ks, 0,sizeof(fftw_complex)*numks*csize);
 
-
-    #ifdef _OPENMP
-    #pragma omp parallel for
-    #endif
+    #pragma omp parallel for shared(partialdelta_ks)
     for (int i=0;i<nside;i++){
         int ii,jj,kabs,ind;
         if (i<middleplus1) ii=i*i;
@@ -231,21 +221,14 @@ void getBk(double* Bk,fftw_complex* delta_k,int nside,int* ks,int numks,int star
             else jj=(j-nside)*(j-nside);
             for(int k=0;k<middleplus1;k++){
                 kabs=(int)(sqrt(ii+jj+k*k)+0.5);
-                if ((kabs-start)%step==0){
-                	kabs=(kabs-start)/step;
-                	if (kabs<numks){
+                if ((kabs-k_min*step)%step==0){
+                	kabs=(kabs-k_min*step)/step;
+                	if ((kabs>=0)and(kabs<numks)){
                 		ind=yzsize*i+middleplus1*j+k;
                     	partialdelta_ks[kabs*csize+ind][0]+=delta_k[ind][0];
                     	partialdelta_ks[kabs*csize+ind][1]+=delta_k[ind][1];
                 	}
                 }
-                /*
-                if (kabs<numks){
-                    ind=yzsize*i+middleplus1*j+k;
-                    partialdelta_ks[kabs*csize+ind][0]+=delta_k[ind][0];
-                    partialdelta_ks[kabs*csize+ind][1]+=delta_k[ind][1];
-                    //memcpy(partialdelta_ks+kabs*csize+yzsize*i+middleplus1*j+k,delta_k+yzsize*i+middleplus1*j+k,sizeof(fftw_complex));
-                */
             }     
         }
     }
@@ -273,9 +256,7 @@ void getBk(double* Bk,fftw_complex* delta_k,int nside,int* ks,int numks,int star
     //Now the counts reuse same array for memory
     memset(partialdelta_ks, 0,sizeof(fftw_complex)*numks*csize);
 
-    #ifdef _OPENMP
     #pragma omp parallel for
-    #endif
     for (int i=0;i<nside;i++){
         int ii,jj,kabs;
         if (i<middleplus1) ii=i*i;
@@ -285,9 +266,9 @@ void getBk(double* Bk,fftw_complex* delta_k,int nside,int* ks,int numks,int star
             else jj=(j-nside)*(j-nside);
             for(int k=0;k<middleplus1;k++){  
                 kabs=(int)(sqrt(ii+jj+k*k)+0.5);
-                if ((kabs-start)%step==0){
-                	kabs=(kabs-start)/step;
-                	if (kabs<numks) partialdelta_ks[kabs*csize+yzsize*i+middleplus1*j+k][0]=1;
+                if ((kabs-k_min*step)%step==0){
+                    kabs=(kabs-k_min*step)/step;
+                    if ((kabs>=0)and(kabs<numks)) partialdelta_ks[kabs*csize+yzsize*i+middleplus1*j+k][0]=1;
                 }
             }
         }
@@ -300,9 +281,15 @@ void getBk(double* Bk,fftw_complex* delta_k,int nside,int* ks,int numks,int star
 
     //free
     fftw_destroy_plan(p);
-    free(partialdelta_ks);
-    if (!quiet) std::cout<<"  Sum over realspace"<<std::endl;
+    delete[] partialdelta_ks;
 
+    std::ofstream tt;
+    tt.open("tesets");
+    tt.write((char*)partialdeltas,sizeof(double)*numks*size);
+    tt.close();
+
+
+    if (!quiet) std::cout<<"  Sum over realspace"<<std::endl;
     /*
     //Change to val array
 
@@ -320,24 +307,29 @@ void getBk(double* Bk,fftw_complex* delta_k,int nside,int* ks,int numks,int star
 	}
 	//free(partialcounts);
 	*/
+    //std::cout<<fsize<<std::endl;
 
-
-    for(int i=0;i<numks;i++){
+    int count=0;
+    for(int i=k_min;i<k_max+1;i++){
         //int multi=1;
+        int ii=i-k_min;
+        int jj,kk;
         double deltasum,countsum;
-        int ind;
+        //int ind;
         double* partialproddelta=new double[size];
         double* partialprodcount=new double[size];
         
-        for(int j=0;j<i+1;j++){
-        	
+        for(int j=k_min;j<i+1;j++){
+            jj=j-k_min;
+
             for(int sumind=0;sumind<size;sumind++){
-                partialproddelta[sumind]=partialdeltas[i*size+sumind]*partialdeltas[j*size+sumind];
-                partialprodcount[sumind]=partialcounts[i*size+sumind]*partialcounts[j*size+sumind];
+                partialproddelta[sumind]=partialdeltas[ii*size+sumind]*partialdeltas[jj*size+sumind];
+                partialprodcount[sumind]=partialcounts[ii*size+sumind]*partialcounts[jj*size+sumind];
             }
             
 
-            for(int k=i-j;k<j+1;k++){
+            for(int k=k_min;k<j+1;k++){
+                if (k<(i-j)) continue;
                 /*
                 if (i==j){
                     if (j==k) multi=6;
@@ -345,36 +337,46 @@ void getBk(double* Bk,fftw_complex* delta_k,int nside,int* ks,int numks,int star
                 }
                 else if ((j==k)or(i==k)) multi=2;
                 */
+                kk=k-k_min;
                 
                 deltasum=0;
                 countsum=0;
                 
-                #ifdef _OPENMP
-    			#pragma omp parallel for
-    			#endif
-                for(int sumind=0;sumind<size;sumind++){
-                    deltasum+=partialproddelta[sumind]*partialdeltas[k*size+sumind];
-                    countsum+=partialprodcount[sumind]*partialcounts[k*size+sumind];
+    			#pragma omp parallel for reduction(+: deltasum,countsum)
+                for(int sumind2=0;sumind2<size;sumind2++){
+                    deltasum+=partialproddelta[sumind2]*partialdeltas[kk*size+sumind2];
+                    countsum+=partialprodcount[sumind2]*partialcounts[kk*size+sumind2];
                 }
                 
                 //deltasum = (partialdeltasv[i] * partialdeltasv[j]*partialdeltasv[k]).sum();
                 //countsum = (partialcountsv[i] * partialcountsv[j]*partialcountsv[k]).sum();
 
-                ind=to1dind(i,j,k,ny);
-                if (countsum!=0.0) Bk[ind]+=deltasum/countsum;
-
+                if (countsum>0.0){
+                    Bk[count]=deltasum/countsum;
+                    Bkcount[count]=countsum;
+                }
+                else{
+                    Bk[count]=0.0;
+                    Bkcount[count]=0.0;
+                }
+                Bkind[3*count+0]=step*i;
+                Bkind[3*count+1]=step*j;
+                Bkind[3*count+2]=step*k;
+                count++;
             }
         }
         
-        free(partialproddelta);
-        free(partialprodcount);
+        delete[] partialproddelta;
+        delete[] partialprodcount;
         
     }
+    std::cout<<numks<<" "<<fsize<<" "<<count<<std::endl;
+    assert(count==fsize);
     if (!quiet) std::cout<<"  Done"<<std::endl;
 }
 
 
-
+/*
 inline int flatsize(int ny){
     return (ny+1)*(ny+2)*(ny+3)/6;
 }
@@ -395,10 +397,10 @@ int* getBk_ind(int nside,int start, int step){
     }
     return Bkind;
 }
+*/
 
 
-
-
+/*
 void getBk_naive(double* Bk,fftw_complex* delta_k,int nside){
     int middleplus1=nside/2+1;
     int ny=nside/2;
@@ -503,8 +505,8 @@ void getBk_naive(double* Bk,fftw_complex* delta_k,int nside){
             }
     }
 
-    free(counts);
-    free(kabsarr);
+    delete[] counts;
+    delete[] kabsarr;
 }
 
 void getBkangav_naive(double* Bk,fftw_complex* delta_k,int nside){
@@ -611,6 +613,7 @@ void getBkangav_naive(double* Bk,fftw_complex* delta_k,int nside){
         }
     }
 
-    free(counts);
-    free(kabsarr);
+    delete[] counts;
+    delete[] kabsarr;
 }
+*/

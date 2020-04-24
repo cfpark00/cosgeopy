@@ -35,8 +35,10 @@ int main(int argc, char *argv[]){
 
     int nside=256;
 	int i=1;
+    int mas=0;
 	std::string filename("");
     std::string filenamePk("./data/pk.dat");
+    std::string filenameks("./data/ks.dat");
 	bool quiet=0;
     bool fromrealspace=0;
     while (i<argc){
@@ -46,6 +48,8 @@ int main(int argc, char *argv[]){
         else if (!strcmp(argv[i],"-fromrealspace")) fromrealspace=1;
         else if (!strcmp(argv[i],"-n_thread")) omp_set_num_threads(atoi(argv[++i]));
         else if (!strcmp(argv[i],"-filenamePk")) filenamePk = argv[++i];
+        else if (!strcmp(argv[i],"-filenameks")) filenameks = argv[++i];
+        else if (!strcmp(argv[i],"-mas")) mas = atoi(argv[++i]);
         else {
             std::cout<<std::endl<<"Error in arguments"<<std::endl;
             assert(0);
@@ -101,13 +105,22 @@ int main(int argc, char *argv[]){
     }
 
     timer("Start Pk: ",quiet);
-    double* Pk=new double[nside/2+1];
-    memset(Pk, 0,(nside/2+1)*sizeof(double));
-    getPk(Pk,delta_k,nside);
+    int len=(int)(sqrt(3*(nside/2)*(nside/2)))+1;
+    double* Pk=new double[len];
+    memset(Pk, 0,(len)*sizeof(double));
+    double* ks=new double[len];
+    memset(ks, 0,(len)*sizeof(double));
+    getPk(ks,Pk,delta_k,nside,mas);
+
+    std::ofstream fileks;
+    fileks.open(filenameks);
+    fileks.write((char*)ks, sizeof(double)*(len));
+    fileks.close();
+    free(ks);
 
     std::ofstream filep;
     filep.open(filenamePk);
-    filep.write((char*)Pk, sizeof(double)*(nside/2+1));
+    filep.write((char*)Pk, sizeof(double)*(len));
     filep.close();
     free(Pk);
 
