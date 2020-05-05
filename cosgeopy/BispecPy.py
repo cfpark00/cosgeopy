@@ -2,6 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import subprocess
 import matplotlib.colors as colors
+import pickle
 print("Please set BispecPy.exdir=\"path_to_C++_executables\"")
 print("This is \"./src/\" from the default BispecPy.py location")
 
@@ -32,6 +33,38 @@ def bispectrum(nside=64,k_min=1,k_max=-1,step=1,filename="./src/data/delta_k.dat
     arg.append(str(k_max))
     arg.append("-step")
     arg.append(str(step))
+
+    arg.append("-filenameBk")
+    arg.append(filenameBk)
+    arg.append("-filenameBkind")
+    arg.append(filenameBkind)
+    arg.append("-filenameBkcount")
+    arg.append(filenameBkcount)
+    
+    if fromrealspace:
+        arg.append("-fromrealspace")
+    if quiet:
+        arg.append("-quiet")
+    if n_thread is not None:
+        arg.append("-n_thread")
+        arg.append(str(int(n_thread)))
+    if only_command:
+        print(" ".join(arg))
+        return
+    print(subprocess.check_output(arg).decode("utf-8"))
+
+def bispectrum_custom_k(nside=64,numtrips=-1,filename="./src/data/delta_k.dat",fromrealspace=False
+    ,filenameBk="./src/data/bk.dat",filenameBkind="./src/data/bkinds.dat",filenameBkcount="./src/data/bkcount.dat"
+                        ,quiet=False,n_thread=None,only_command=False):
+    """
+    Function creating a Gaussian density field
+    
+    """
+    arg=[exdir+"bispectrum_custom_k","-nside",str(nside)]
+    arg.append("-filename")
+    arg.append(filename)
+    arg.append("-numtrips")
+    arg.append(str(numtrips))
 
     arg.append("-filenameBk")
     arg.append(filenameBk)
@@ -107,12 +140,14 @@ def flatsize(k_min,k_max):
     return c
 
 
-def memory_estimate(nside=256,k_min=1,k_max=-1,step=1):
+def memory_estimate(nside=256,k_min=1,k_max=-1,step=1,numtrips=0,numunique=-1):
     print("These are rough estimates for nside="+str(nside))
     print()
     if k_max==-1:
         k_max=nside//2
-    fsize=flatsize(k_min,k_max)
+    if numunique==-1:
+        numunique=numtrips
+    fsize=flatsize(k_min//step,k_max//step)
     numks=k_max//step-k_min//step
     print("fullrun")
     print("  -default: {:.2f} GB".format((nside*nside*nside*8*(1+1))/1e9))
@@ -124,6 +159,8 @@ def memory_estimate(nside=256,k_min=1,k_max=-1,step=1):
     print("  -default: {:.2f} GB".format((nside*nside*nside*8)/1e9))
     print("bispectrum for",numks,"ks, thus",fsize,"triplets.")
     print("  -default: {:.2f} GB".format((nside*nside*nside*8+nside*nside*nside*(numks+1)*8*(1+1+1)+fsize*8*(1+1/2))/1e9))
+    print("bispectrum custom for",numtrips,"triplets.")
+    print("  -default: {:.2f} GB".format((nside*nside*nside*8+nside*nside*nside*(numunique+1)*8*(1+1+1)+numtrips*8*(1+1/2))/1e9))
 
 def plotrfield(filename="./src/data/delta.dat",nside=-1,physicalsize=None,z=0):
     if physicalsize==None:
@@ -372,6 +409,36 @@ class field():
             assert False,"This should not happen"
         return res
 
+    def compute_bispectrum_custom_k(self,bkind=None,bkname=None,bkindname=None,bkcountname=None,quiet=False,n_thread=None,only_command=False):
+        if bkname is None:
+            bkname="bk.dat"
+        self.bkpath=self.folpath+bkname
+        if bkind is not None:
+            bkindname="bkind.dat"
+            self.bkindpath=self.folpath+bkindname
+            bkind=bkind.astype(np.int32).tofile(self.bkindpath)
+            self.numtrips=len(bkind)
+        elif bkindname is None:
+            bkindname="bkind.dat"
+            self.bkindpath=self.folpath+bkindname
+        else:
+            self.bkindpath=self.folpath+bkindname
+        if bkcountname is None:
+            bkcountname="bkcount.dat"
+        self.bkcountpath=self.folpath+bkcountname
+        try:
+            self.deltakpath
+        except:
+            self.compute_fft3d()
+        try:
+            self.deltakpath
+            res=bispectrum_custom_k(nside=self.nside,numtrips=self.numtrips,filename=self.deltakpath,fromrealspace=False
+                ,filenameBk=self.bkpath,filenameBkind=self.bkindpath,filenameBkcount=self.bkcountpath
+                ,quiet=quiet,n_thread=n_thread,only_command=only_command)
+        except:
+            assert False,"This should not happen"
+        return res
+
     def compute_powerspectrum(self,mas=0,ksname=None,pkname=None,quiet=False,n_thread=None,only_command=False):
         if pkname is None:
             pkname="pk.dat"
@@ -448,8 +515,16 @@ class field():
                 return (np.linspace(0,self.nside/2,self.nside//2+1),np.fromfile(self.pkpath, dtype=float))
             if select=="Bk":
                 #change units
-                return (np.fromfile(self.bkindpath, dtype=np.int32).reshape(fs,3)
+                return (np.fromfile(self.bkindpath, dtype=np.int32).reshape(-1,3)
                     ,np.fromfile(self.bkpath, dtype=np.float64))
+
+    def save(self,file):
+        pickle.dump(self,open(file,"wb"))
+
+    @classmethod
+    def loader(field,file):
+        return pickle.load(open(file,"rb"))
+
 
 
 

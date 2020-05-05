@@ -10,7 +10,8 @@
 #include <algorithm>
 #include<complex.h>
 #include <fftw3.h>
-
+#include <map>
+#include <vector> 
 
 #include <sys/time.h>
 
@@ -51,24 +52,23 @@ int main(int argc, char *argv[]){
     int nside=256;
 	int i=1;
 	std::string filename("");
+    //std::string filename_unique_k("");
     std::string filenameBk("./data/bk.dat");
     std::string filenameBkind("./data/bkind.dat");
     std::string filenameBkcount("./data/bkcount.dat");
-    int step=1;
-    int k_min=1;
-    int k_max=-1;
+    int numtrips=-1;
+    //int numunique=-1;
 	bool quiet=0;
     bool fromrealspace=0;
     //bool getBkinds=0;
     while (i<argc){
     	if (!strcmp(argv[i],"-quiet")) quiet=1;
-    	else if (!strcmp(argv[i],"-nside")) nside = atoi(argv[++i]);
-    	else if (!strcmp(argv[i],"-k_min")) k_min = atoi(argv[++i]);
-    	else if (!strcmp(argv[i],"-k_max")) k_max = atoi(argv[++i]);
-    	else if (!strcmp(argv[i],"-step")) step = atoi(argv[++i]);
+    	//else if (!strcmp(argv[i],"-numunique")) numunique = atoi(argv[++i]);
+        else if (!strcmp(argv[i],"-numtrips")) numtrips = atoi(argv[++i]);
+        else if (!strcmp(argv[i],"-nside")) nside = atoi(argv[++i]);
     	else if (!strcmp(argv[i],"-filename")) filename = argv[++i];
+        //else if (!strcmp(argv[i],"-filename_unique_k")) filename_unique_k = argv[++i];
         else if (!strcmp(argv[i],"-fromrealspace")) fromrealspace=1;
-        //else if (!strcmp(argv[i],"-getBkinds")) getBkinds=1;
         else if (!strcmp(argv[i],"-n_thread")) omp_set_num_threads(atoi(argv[++i]));
         else if (!strcmp(argv[i],"-filenameBk")) filenameBk = argv[++i];
         else if (!strcmp(argv[i],"-filenameBkind")) filenameBkind = argv[++i];
@@ -81,7 +81,7 @@ int main(int argc, char *argv[]){
     }
     assert(nside>0);
     assert(((nside+1)%2)&&"Only even sides accepted.");
-    if (k_max==-1) k_max=nside/2;
+    assert(numtrips!=-1);
 
     if (!quiet){
         std::cout<<"Starting Program"<<std::endl;
@@ -129,44 +129,47 @@ int main(int argc, char *argv[]){
     }
 
     timer("Start Bk: ",quiet);
-    //std::cout<<fsize<<std::endl;
-    //assert(start)
-    k_min=k_min/step;
-   	k_max=k_max/step;
 
-    int fsize=flatsize(k_min,k_max);
-    int* Bkind=new int[3*fsize];
-    double* Bk=new double[fsize];
-    double* Bkcount=new double[fsize];
-    //std::cout<<fsize<<std::endl;
-    /*
-    int* Bkind;
-    if (!getBkinds){
-        Bkind=getBk_ind(nside,start,step);
+
+    int* Bkind=new int[3*numtrips];
+    double* Bk=new double[numtrips];
+    double* Bkcount=new double[numtrips];
+
+
+    timer("Start Bkind read at: ",quiet);
+    std::ifstream filebi(filenameBkind);
+    filebi.read((char*)Bkind, sizeof(int)*3*numtrips);
+    filebi.close();
+
+    std::vector<int> unique_k(Bkind,Bkind+3*numtrips);
+    std::sort(unique_k.begin(), unique_k.end());
+    std::vector<int>::iterator last;
+    last = std::unique (unique_k.begin(), unique_k.end());
+    unique_k.erase(last, unique_k.end());
+
+    std::map<int,int> kmap;
+    std::cout<<std::endl;
+    for(int i=0;i<(int)unique_k.size();i++){
+        kmap[unique_k[i]]=i;
+        //std::cout<<unique_k[i]<<" "<<std::endl;
     }
-    else{
-        assert(0&&("Not Implemented"));
-    }
-    */
-    //memset(Bk, 0,fsize*sizeof(double));
-    getBk(Bkind,Bk,Bkcount,fsize,delta_k,nside,k_min,k_max,step,quiet);
+
+
+    getBk_custom_k(Bkind,kmap,Bk,Bkcount,numtrips,delta_k,nside,(int)unique_k.size(),quiet);
     timer("Make Stat at: ",quiet);
-    if (!quiet) std::cout<<std::endl<<"  Computed "<<fsize<<" triplets in "<<dt<<". "<<(dt/fsize)<<" per triplet"<<std::endl;//<<start<<step<<fsize<<""<<Bk[0]<<std::endl;
+    if (!quiet) std::cout<<std::endl<<"  Computed "<<numtrips<<" triplets in "<<dt<<". "<<(dt/numtrips)<<" per triplet"<<std::endl;//<<start<<step<<fsize<<""<<Bk[0]<<std::endl;
     timer("Start Bk write at: ",quiet);
     std::ofstream fileb(filenameBk);
-    fileb.write((char*)Bk, sizeof(double)*fsize);
+    fileb.write((char*)Bk, sizeof(double)*numtrips);
     fileb.close();
     std::ofstream filebc(filenameBkcount);
-    filebc.write((char*)Bkcount, sizeof(double)*fsize);
+    filebc.write((char*)Bkcount, sizeof(double)*numtrips);
     filebc.close();
     delete[] Bk;
     delete[] Bkcount;
-
-    timer("Start Bkind write at: ",quiet);
-    std::ofstream filebi(filenameBkind);
-    filebi.write((char*)Bkind, sizeof(int)*3*fsize);
-    filebi.close();
     delete[] Bkind;
+
+
 
     if (!quiet){
         timer("\nRun successful. ",quiet);

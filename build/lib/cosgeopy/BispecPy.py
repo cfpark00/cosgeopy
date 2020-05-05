@@ -13,45 +13,6 @@ def set_exdir(path):
         path+="/"
     exdir=path
     print("C++ binaries assumed to live in:",exdir)
-"""
-def fullrun(nside=64,realspace=True,doPk=True,doBk=False
-                        ,Pkfilename=""
-                        ,filenamek="./src/data/delta_k.dat",filenamePk="./src/data/pk.dat",filenameBk="./src/data/bk.dat"
-                        ,filenamer="./src/data/delta.dat"
-                        ,quiet=False,n_thread=None,only_command=False):
-
-    #Function creating a Gaussian density field
-    
-
-    arg=[exdir+"fullrun","-nside",str(nside)]
-    arg.append("-Pkfilename")
-    arg.append(Pkfilename)
-    arg.append("-filenamek")
-    arg.append(filenamek)
-    arg.append("-filenamer")
-    arg.append(filenamer)
-    arg.append("-filenamePk")
-    arg.append(filenamePk)
-    arg.append("-filenameBk")
-    arg.append(filenameBk)
-    if realspace:
-        arg.append("-realspace")
-    if quiet:
-        arg.append("-quiet")
-    if not doPk:
-        arg.append("-doPk")
-        arg.append("0")
-    if doBk:
-        arg.append("-doBk")
-        arg.append("1")
-    if n_thread is not None:
-        arg.append("-n_thread")
-        arg.append(str(int(n_thread)))
-    if only_command:
-        print(" ".join(arg))
-        return
-    print(subprocess.check_output(arg).decode("utf-8"))
-"""
 
 def bispectrum(nside=64,k_min=1,k_max=-1,step=1,filename="./src/data/delta_k.dat",fromrealspace=False
     ,filenameBk="./src/data/bk.dat",filenameBkind="./src/data/bkinds.dat",filenameBkcount="./src/data/bkcount.dat"
@@ -71,6 +32,38 @@ def bispectrum(nside=64,k_min=1,k_max=-1,step=1,filename="./src/data/delta_k.dat
     arg.append(str(k_max))
     arg.append("-step")
     arg.append(str(step))
+
+    arg.append("-filenameBk")
+    arg.append(filenameBk)
+    arg.append("-filenameBkind")
+    arg.append(filenameBkind)
+    arg.append("-filenameBkcount")
+    arg.append(filenameBkcount)
+    
+    if fromrealspace:
+        arg.append("-fromrealspace")
+    if quiet:
+        arg.append("-quiet")
+    if n_thread is not None:
+        arg.append("-n_thread")
+        arg.append(str(int(n_thread)))
+    if only_command:
+        print(" ".join(arg))
+        return
+    print(subprocess.check_output(arg).decode("utf-8"))
+
+def bispectrum_custom_k(nside=64,numtrips=-1,filename="./src/data/delta_k.dat",fromrealspace=False
+    ,filenameBk="./src/data/bk.dat",filenameBkind="./src/data/bkinds.dat",filenameBkcount="./src/data/bkcount.dat"
+                        ,quiet=False,n_thread=None,only_command=False):
+    """
+    Function creating a Gaussian density field
+    
+    """
+    arg=[exdir+"bispectrum_custom_k","-nside",str(nside)]
+    arg.append("-filename")
+    arg.append(filename)
+    arg.append("-numtrips")
+    arg.append(str(numtrips))
 
     arg.append("-filenameBk")
     arg.append(filenameBk)
@@ -134,16 +127,7 @@ def fft3d(nside,inverse=False,filename="",filenamek="",n_thread=None,only_comman
         print(" ".join(arg))
         return
     print(subprocess.check_output(arg).decode("utf-8"))
-"""
-def flatsize(ny):
-    c=0
-    for i in range(1,int(ny)+1):
-        for j in range(1,i+1):
-            for k in range(max(i-j,1),j+1):
-                c+=1
-    return c
-    return int((ny+1)*(ny+2)*(ny+3)/6)
-"""
+
 def flatsize(k_min,k_max):
     c=0
     for i in range(k_min,k_max+1):
@@ -155,11 +139,13 @@ def flatsize(k_min,k_max):
     return c
 
 
-def memory_estimate(nside=256,k_min=1,k_max=-1,step=1):
+def memory_estimate(nside=256,k_min=1,k_max=-1,step=1,numtrips=0,numunique=-1):
     print("These are rough estimates for nside="+str(nside))
     print()
     if k_max==-1:
         k_max=nside//2
+    if numunique==-1:
+        numunique=numtrips
     fsize=flatsize(k_min,k_max)
     numks=k_max//step-k_min//step
     print("fullrun")
@@ -172,8 +158,8 @@ def memory_estimate(nside=256,k_min=1,k_max=-1,step=1):
     print("  -default: {:.2f} GB".format((nside*nside*nside*8)/1e9))
     print("bispectrum for",numks,"ks, thus",fsize,"triplets.")
     print("  -default: {:.2f} GB".format((nside*nside*nside*8+nside*nside*nside*(numks+1)*8*(1+1+1)+fsize*8*(1+1/2))/1e9))
-    #print("bispectrum_naive")
-    #print("  -default: {:.2f} GB".format((nside*nside*nside*8*(1+1)+flatsize(nside//2)*8*(1+1/2))/1e9))
+    print("bispectrum custom for",numtrips,"triplets.")
+    print("  -default: {:.2f} GB".format((nside*nside*nside*8+nside*nside*nside*(numunique+1)*8*(1+1+1)+numtrips*8*(1+1/2))/1e9))
 
 def plotrfield(filename="./src/data/delta.dat",nside=-1,physicalsize=None,z=0):
     if physicalsize==None:
@@ -214,7 +200,7 @@ def plotkfield(filename="./src/data/delta_k.dat",nside=-1,physicalsize=None,k_z=
     plt.figure(figsize=(8,8))
     vmin=np.min(delta_k)
     vmax=np.max(delta_k)
-    z=k_z#nside-k_z if k_z<0 else k_z+nside//2
+    z=k_z
     plt.subplot(221)
     plt.imshow(shift(delta_k[:,:,z,0]).T,origin="below",extent=[-k_ny,k_ny,-k_ny,k_ny]
         ,norm=colors.SymLogNorm(linthresh=0.03, linscale=0.03,vmin=vmin, vmax=vmax, base=10))
@@ -422,6 +408,36 @@ class field():
             assert False,"This should not happen"
         return res
 
+    def compute_bispectrum_custom_k(self,bkind=None,bkname=None,bkindname=None,bkcountname=None,quiet=False,n_thread=None,only_command=False):
+        if bkname is None:
+            bkname="bk.dat"
+        self.bkpath=self.folpath+bkname
+        if bkind is not None:
+            bkindname="bkind.dat"
+            self.bkindpath=self.folpath+bkindname
+            bkind.astype(np.int32).tofile(self.bkindpath)
+            self.numtrips=len(bkind)
+        elif bkindname is None:
+            bkindname="bkind.dat"
+            self.bkindpath=self.folpath+bkindname
+        else:
+            self.bkindpath=self.folpath+bkindname
+        if bkcountname is None:
+            bkcountname="bkcount.dat"
+        self.bkcountpath=self.folpath+bkcountname
+        try:
+            self.deltakpath
+        except:
+            self.compute_fft3d()
+        try:
+            self.deltakpath
+            res=bispectrum_custom_k(nside=self.nside,numtrips=self.numtrips,filename=self.deltakpath,fromrealspace=False
+                ,filenameBk=self.bkpath,filenameBkind=self.bkindpath,filenameBkcount=self.bkcountpath
+                ,quiet=quiet,n_thread=n_thread,only_command=only_command)
+        except:
+            assert False,"This should not happen"
+        return res
+
     def compute_powerspectrum(self,mas=0,ksname=None,pkname=None,quiet=False,n_thread=None,only_command=False):
         if pkname is None:
             pkname="pk.dat"
@@ -439,10 +455,6 @@ class field():
                 ,filenameks=self.kspath,filenamePk=self.pkpath,quiet=quiet,n_thread=n_thread,only_command=only_command)
         except:
             assert False,"This should not happen"
-            """
-            res=powerspectrum(nside=self.nside,filename=self.deltapath,fromrealspace=True
-                ,filenamePk=self.pkpath,quiet=quiet,n_thread=n_thread,only_command=only_command)
-            """
         return res
 
     def plot(self,select="r",z=0,args={},**kwargs):
@@ -505,6 +517,29 @@ class field():
                 return (np.fromfile(self.bkindpath, dtype=np.int32).reshape(fs,3)
                     ,np.fromfile(self.bkpath, dtype=np.float64))
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 """
 def readPk(filename="./src/data/pk.dat",nside=-1,physicalsize=None,inputPK=None):
     if physicalsize==None:
@@ -518,4 +553,44 @@ def readPk(filename="./src/data/pk.dat",nside=-1,physicalsize=None,inputPK=None)
     pk=np.fromfile(filename, dtype=float)
     assert len(pk)==int(nside/2+1),"Pk length not matching"
     return pk
+"""
+
+"""
+def fullrun(nside=64,realspace=True,doPk=True,doBk=False
+                        ,Pkfilename=""
+                        ,filenamek="./src/data/delta_k.dat",filenamePk="./src/data/pk.dat",filenameBk="./src/data/bk.dat"
+                        ,filenamer="./src/data/delta.dat"
+                        ,quiet=False,n_thread=None,only_command=False):
+
+    #Function creating a Gaussian density field
+    
+
+    arg=[exdir+"fullrun","-nside",str(nside)]
+    arg.append("-Pkfilename")
+    arg.append(Pkfilename)
+    arg.append("-filenamek")
+    arg.append(filenamek)
+    arg.append("-filenamer")
+    arg.append(filenamer)
+    arg.append("-filenamePk")
+    arg.append(filenamePk)
+    arg.append("-filenameBk")
+    arg.append(filenameBk)
+    if realspace:
+        arg.append("-realspace")
+    if quiet:
+        arg.append("-quiet")
+    if not doPk:
+        arg.append("-doPk")
+        arg.append("0")
+    if doBk:
+        arg.append("-doBk")
+        arg.append("1")
+    if n_thread is not None:
+        arg.append("-n_thread")
+        arg.append(str(int(n_thread)))
+    if only_command:
+        print(" ".join(arg))
+        return
+    print(subprocess.check_output(arg).decode("utf-8"))
 """

@@ -6,7 +6,7 @@
 #include <assert.h>
 #include <string.h>
 #include <numeric>
-#include <valarray>
+#include <map>
 
 #include <iostream>
 #include <fstream>
@@ -370,10 +370,176 @@ void getBk(int* Bkind,double* Bk,double* Bkcount,int fsize,fftw_complex* delta_k
         delete[] partialprodcount;
         
     }
-    std::cout<<numks<<" "<<fsize<<" "<<count<<std::endl;
+    //std::cout<<numks<<" "<<fsize<<" "<<count<<std::endl;
     assert(count==fsize);
     if (!quiet) std::cout<<"  Done"<<std::endl;
 }
+
+void getBk_custom_k(int* Bkindice,std::map<int,int> kmap,double* Bk,double* Bkcount,int fsize,fftw_complex* delta_k,int nside,int numks,bool quiet){
+    if (!quiet) std::cout<<std::endl<<"  Generate k-rings"<<std::endl;
+    int middleplus1=nside/2+1;
+    int yzsize=middleplus1*nside;
+    int csize=(nside/2+1)*(nside)*(nside);
+    int size=nside*nside*nside;
+
+    //Initialize the kbins
+    //Make the k-space rings
+    fftw_complex *partialdelta_ks;
+    partialdelta_ks = (fftw_complex*) fftw_malloc(sizeof(fftw_complex)*numks*csize);
+    memset(partialdelta_ks, 0,sizeof(fftw_complex)*numks*csize);
+
+    std::map<int,int>::iterator no;
+    no=kmap.end();
+
+    #pragma omp parallel for shared(partialdelta_ks,kmap,no)
+    for (int i=0;i<nside;i++){
+        int ii,jj,kabs,ind;
+        std::map<int,int>::iterator it;
+        if (i<middleplus1) ii=i*i;
+        else ii=(i-nside)*(i-nside);
+        for (int j=0;j<nside;j++){
+            if (j<middleplus1) jj=j*j;
+            else jj=(j-nside)*(j-nside);
+            for(int k=0;k<middleplus1;k++){
+                kabs=(int)(sqrt(ii+jj+k*k)+0.5);
+                
+                it=kmap.find(kabs);
+                /*
+                if  ((i==0)&&(j==0)){
+                std::cout<<"k"<<kabs<<"pass"<<(it!=no)<<std::endl;
+                std::cout<<it->second<<std::endl;
+                }
+                */
+                if (it!=no){
+                    kabs=it->second;
+                    ind=yzsize*i+middleplus1*j+k;
+                    partialdelta_ks[kabs*csize+ind][0]+=delta_k[ind][0];
+                    partialdelta_ks[kabs*csize+ind][1]+=delta_k[ind][1]; 
+                }
+            }     
+        }
+    }
+    /*
+    std::ofstream ttt("tttt");
+    ttt.write((char*)partialdelta_ks, sizeof(fftw_complex)*numks*csize);
+    ttt.close();
+    */
+
+    if (!quiet) std::cout<<"  FFT k-rings"<<std::endl;
+    double* partialdeltas=new double[numks*size];
+    double* partialcounts=new double[numks*size];
+    int n[]={nside,nside,nside};
+    
+    #ifdef _OPENMP
+    fftw_init_threads();
+    #endif
+    fftw_plan p;
+    #ifdef _OPENMP
+    fftw_plan_with_nthreads(omp_get_max_threads());
+    #endif
+    
+    p=fftw_plan_many_dft_c2r(3,n,numks
+        ,partialdelta_ks,NULL,1,csize
+        ,partialdeltas,NULL,1,size
+        ,FFTW_ESTIMATE);
+    fftw_execute(p);
+    //Now the counts reuse same array for memory
+    memset(partialdelta_ks, 0,sizeof(fftw_complex)*numks*csize);
+
+    #pragma omp parallel for shared(partialdelta_ks,kmap,no)
+    for (int i=0;i<nside;i++){
+        int ii,jj,kabs;
+        std::map<int,int>::iterator it;
+        if (i<middleplus1) ii=i*i;
+        else ii=(i-nside)*(i-nside);
+        for (int j=0;j<nside;j++){
+            if (j<middleplus1) jj=j*j;
+            else jj=(j-nside)*(j-nside);
+            for(int k=0;k<middleplus1;k++){  
+                kabs=(int)(sqrt(ii+jj+k*k)+0.5);
+                it=kmap.find(kabs);
+                if (it!=no){
+                    kabs=it->second;
+                    partialdelta_ks[kabs*csize+yzsize*i+middleplus1*j+k][0]=1;
+                }
+            }
+        }
+    }
+    p=fftw_plan_many_dft_c2r(3,n,numks
+        ,partialdelta_ks,NULL,1,csize
+        ,partialcounts,NULL,1,size
+        ,FFTW_ESTIMATE);
+    fftw_execute(p);
+
+    //free
+    fftw_destroy_plan(p);
+    delete[] partialdelta_ks;
+    /*
+    std::ofstream tt;
+    tt.open("tesets");
+    tt.write((char*)partialdeltas,sizeof(double)*numks*size);
+    tt.close();
+    */
+
+    if (!quiet) std::cout<<"  Sum over realspace"<<std::endl;
+
+    int count=0;
+    double deltasum,countsum;
+    for(int i=0;i<fsize;i++){
+        int k1ind=kmap[Bkindice[3*i+0]];
+        int k2ind=kmap[Bkindice[3*i+1]];
+        int k3ind=kmap[Bkindice[3*i+2]];
+        //std::cout<<k1ind<<" "<<k2ind<<" "<<k3ind<<" "<<std::endl;
+
+        deltasum=0;
+        countsum=0;
+        #pragma omp parallel for reduction(+: deltasum,countsum)
+        for(int sumind=0;sumind<size;sumind++){
+            deltasum+=partialdeltas[k1ind*size+sumind]*partialdeltas[k2ind*size+sumind]*partialdeltas[k3ind*size+sumind];
+            countsum+=partialcounts[k1ind*size+sumind]*partialcounts[k2ind*size+sumind]*partialcounts[k3ind*size+sumind];
+        }
+        if (countsum>0.0){
+            std::cout<<deltasum<<std::endl;
+            Bk[i]=deltasum/countsum;
+            Bkcount[i]=countsum;
+        }
+        else{
+            Bk[i]=0.0;
+            Bkcount[i]=0.0;
+        }
+        count++;
+    }
+
+    assert(count==fsize);
+    if (!quiet) std::cout<<"  Done"<<std::endl;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 /*
