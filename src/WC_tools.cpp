@@ -17,11 +17,12 @@
 
 
 double sum_all(double* input,int num){
-    double res=0;
+    double res=0.0;
     #pragma omp parallel for reduction(+: res)
     for(int sumind=0;sumind<num;sumind++){
         res+=input[sumind];
     }
+
     return res;
 }
 
@@ -58,10 +59,13 @@ void downscatter(fftw_plan p,fftw_plan ip,double* tempr,fftw_complex* tempk,doub
     int size=nside*nside*nside;
     if ((m==order)||(parent_j==numJs-1)){
         WC[count]=sum_all(got,size);
+        //std::cout<<"endp "<<count<<" "<<WC[count]<<std::endl;
         count++;
     }
     else{
         WC[count]=sum_all(got,size);
+        //std::cout<<got[0]<<" "<<got[1]<<" "<<got[2]<<" "<<got[3]<<" "<<std::endl;
+        //std::cout<<"midp "<<count<<" "<<WC[count]<<std::endl;
         count++;
         double* res;
         res=(double*) fftw_malloc(sizeof(double)*size);
@@ -113,7 +117,14 @@ void getisoWC(int* WCind,double* WC,int nside,int* fsize,double* delta,int order
             }
         }
     }
+    /*
+    std::ofstream file_filt;
+    file_filt.open("./data/filters.dat");
+    file_filt.write((char*)filters,sizeof(double)*numJs*csize);
+    file_filt.close();
+    */
 
+    if (!quiet) std::cout<<std::endl<<"  Scatter"<<std::endl;
     if(save_memory){
         #ifdef _OPENMP
         fftw_init_threads();

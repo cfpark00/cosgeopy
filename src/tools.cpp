@@ -26,7 +26,7 @@ inline int fastrand() {
 } 
 
 inline double getmag(double k) {
-    return 4*(pow(sin(k/4),2)/pow((k+1),2));
+    return 4*(pow(sin(k/3.8),2)/pow((k+1),2));
 }
 
 void fill_delta_k(fftw_complex* delta_k,int nside,int seed){

@@ -112,6 +112,9 @@ int main(int argc, char *argv[]){
         fftw_execute(p);
         fftw_destroy_plan(p);
 
+        //rescale
+        for(int i=0;i<size;i++) delta[i]/=size;
+
         timer("Start delta write at: ",quiet);
 		std::ofstream filer;
 		filer.open(filenamer);

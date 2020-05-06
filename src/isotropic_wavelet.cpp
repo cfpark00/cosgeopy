@@ -94,7 +94,7 @@ int main(int argc, char *argv[]){
         std::cout<<"--------------"<<std::endl;
         std::cout<<std::endl<<"nside="<<nside<<std::endl;
         if (fromkspace) std::cout<<"Will compute from k-space: "<<filename<<std::endl;
-        else std::cout<<"From filenamek="<<filename<<std::endl;
+        else std::cout<<"From real filename="<<filename<<std::endl;
     }
 
     /*------Start----*/
@@ -126,6 +126,10 @@ int main(int argc, char *argv[]){
         fftw_execute(p);
         fftw_destroy_plan(p);
         free(delta_k);
+
+        //rescale
+        for(int i=0;i<size;i++) delta[i]/=size;
+
     }
     else{
         std::ifstream delta_in;
@@ -142,7 +146,7 @@ int main(int argc, char *argv[]){
     	twototheJ*= 2;
     	numJs+=1;
 	}
-	std::cout<<"HI"<<numJs<<std::endl;
+	std::cout<<std::endl<<"J from 0 to "<<numJs-1<<std::endl;
 	assert((numJs>=order)&&("Order too high"));
     int* fsize=meta_size(order,numJs);
     //std::cout<<fsize[0]<<" "<<fsize[1]<<std::endl;
