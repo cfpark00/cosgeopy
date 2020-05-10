@@ -53,8 +53,8 @@ def bispectrum(nside=64,k_min=1,k_max=-1,step=1,filename="./src/data/delta_k.dat
         return
     print(subprocess.check_output(arg).decode("utf-8"))
 
-def IsoWc(nside=64,order=1,sigma=1,filename="./src/data/delta_k.dat",fromkspace=False
-    ,filenameWC="./src/data/wc.dat",filenameWCind="./src/data/wcind.dat"
+def IsoWc(nside=64,order=1,sigma=1,loadfilt=False,filename="./src/data/delta_k.dat",fromkspace=False
+    ,filenameWC="./src/data/wc.dat",filenameWCcount="./src/data/wccount.dat",filenameWCind="./src/data/wcind.dat",filename_filt=""
                         ,quiet=False,n_thread=None,only_command=False):
     """
     Function for isotropic wavelet scattering
@@ -70,11 +70,17 @@ def IsoWc(nside=64,order=1,sigma=1,filename="./src/data/delta_k.dat",fromkspace=
 
     arg.append("-filenameWC")
     arg.append(filenameWC)
+    arg.append("-filenameWCcount")
+    arg.append(filenameWCcount)
+    arg.append("-filename_filt")
+    arg.append(filename_filt)
     arg.append("-filenameWCind")
     arg.append(filenameWCind)
     
     if fromkspace:
         arg.append("-fromkspace")
+    if loadfilt:
+        arg.append("-loadfilt")
     if quiet:
         arg.append("-quiet")
     if n_thread is not None:
@@ -565,7 +571,7 @@ class field():
 
         return res
 
-    def compute_IsoWc(self,order=1,sigma=1,wcindname=None,wcname=None,quiet=False,n_thread=None,only_command=False):
+    def compute_IsoWc(self,order=1,sigma=1,loadfilt=False,filename_filt="",wcindname=None,wccountname=None,wcname=None,quiet=False,n_thread=None,only_command=False):
         if wcname is None:
             wcname="wc.dat"
         self.wcpath=self.folpath+wcname
@@ -574,11 +580,15 @@ class field():
             wcindname="wcind.dat"
         self.wcindpath=self.folpath+wcindname
 
+        if wccountname is None:
+            wccountname="wccount.dat"
+        self.wccountpath=self.folpath+wccountname
+
         self.wc_order=order
         self.wc_sigma=sigma
         self.numJs=get_numJs(self.nside)
-        res=IsoWc(nside=self.nside,order=self.wc_order,sigma=self.wc_sigma,filename=self.deltapath,fromkspace=False
-            ,filenameWC=self.wcpath,filenameWCind=self.wcindpath,quiet=quiet,n_thread=n_thread,only_command=only_command)
+        res=IsoWc(nside=self.nside,order=self.wc_order,sigma=self.wc_sigma,loadfilt=loadfilt,filename_filt=filename_filt,filename=self.deltapath,fromkspace=False
+            ,filenameWC=self.wcpath,filenameWCcount=self.wccountpath,filenameWCind=self.wcindpath,quiet=quiet,n_thread=n_thread,only_command=only_command)
 
         self.writetoreadme("Computed Isotropic Wavelet Coefficients"+"\n")
         self.writetoreadme("  wcpath: "+self.wcpath+"\n")
@@ -646,9 +656,6 @@ class field():
             if select=="WC":
                 #change units
                 return np.fromfile(self.wcpath, dtype=np.float64)
-                return handleunits((np.fromfile(self.bkindpath, dtype=np.int32).reshape(-1,3)
-                    ,np.fromfile(self.bkpath, dtype=np.float64),np.fromfile(self.bkcountpath, dtype=np.float64))
-                ,mode=select,nside=self.nside,physicalsize=self.physicalsize)
         elif units=="Raw":
             if select=="r":
                 return np.fromfile(self.deltapath,dtype=np.float64).reshape(self.nside,self.nside,self.nside)
@@ -662,7 +669,9 @@ class field():
                     ,np.fromfile(self.bkpath, dtype=np.float64))
 
     def save(self,file):
-        pickle.dump(self,open(file,"wb"))
+        f=open(file,"wb")
+        pickle.dump(self,f)
+        f.close()
 
     @classmethod
     def loader(field,file):

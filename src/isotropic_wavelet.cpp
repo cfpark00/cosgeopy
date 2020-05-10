@@ -11,7 +11,7 @@
 #include<complex.h>
 #include <fftw3.h>
 #include <vector>
-
+#include <numeric>
 
 #include <sys/time.h>
 
@@ -30,12 +30,12 @@ void timer(const std::string& Message,bool quiet){
     tm1=t;
 }
 
-int* meta_size(int order, int numJs){
-	int* meta;
-	meta=(int*) malloc(sizeof(int)*3);
-	int indsize=0;//for the mean
+int meta_size(int order, int numJs){
+	//int meta;
+	//meta=(int*) malloc(sizeof(int)*3);
+	//int indsize=0;//for the mean
 	int count=0;//for the mean
-	int maxbat=0;
+	//int maxbat=0;
 	for(int m=0;m<order+1;m++){
 		int quo=1;
 		int div=1;
@@ -43,14 +43,14 @@ int* meta_size(int order, int numJs){
 			quo*=(numJs-i);
 			div*=(i+1);
 		}
-		if ((quo/div)>maxbat) maxbat=(quo/div);
-		indsize+=(quo/div)*m;//m indice for order m
+		//if ((quo/div)>maxbat) maxbat=(quo/div);
+		//indsize+=(quo/div)*m;//m indice for order m
 		count+=(quo/div);
 	}
-	meta[2]=maxbat;
-	meta[1]=count;
-	meta[0]=indsize;
-	return meta;
+	//meta[2]=maxbat;
+	//meta=count;
+	//meta[0]=indsize;
+	return count;
 }
 
 #include <typeinfo>
@@ -62,24 +62,30 @@ int main(int argc, char *argv[]){
     int nside=256;
 	int i=1;
 	std::string filename("");
+	std::string filename_filt("");
     std::string filenameWCind("./data/wcind.dat");
     std::string filenameWC("./data/wc.dat");
+    std::string filenameWCcount("./data/wccount.dat");
     double sigma=1;
 	bool quiet=0;
     bool fromkspace=0;
     bool save_memory=1;
     int order=2;
+    bool loadfilt=0;
     while (i<argc){
     	if (!strcmp(argv[i],"-quiet")) quiet=1;
     	else if (!strcmp(argv[i],"-nside")) nside = atoi(argv[++i]);
     	else if (!strcmp(argv[i],"-sigma")) sigma = atof(argv[++i]);
     	else if (!strcmp(argv[i],"-order")) order = atoi(argv[++i]);
     	else if (!strcmp(argv[i],"-filename")) filename = argv[++i];
+    	else if (!strcmp(argv[i],"-filename_filt")) filename_filt = argv[++i];
+    	else if (!strcmp(argv[i],"-loadfilt")) loadfilt=1;
         else if (!strcmp(argv[i],"-fromkspace")) fromkspace=1;
         else if (!strcmp(argv[i],"-not_save_memory")) save_memory=0;
         else if (!strcmp(argv[i],"-n_thread")) omp_set_num_threads(atoi(argv[++i]));
         else if (!strcmp(argv[i],"-filenameWC")) filenameWC = argv[++i];
         else if (!strcmp(argv[i],"-filenameWCind")) filenameWCind = argv[++i];
+        else if (!strcmp(argv[i],"-filenameWCcount")) filenameWCcount = argv[++i];
         else {
             std::cout<<std::endl<<"Error in arguments"<<std::endl;
             assert(0);
@@ -137,6 +143,8 @@ int main(int argc, char *argv[]){
         delta_in.read((char*)delta,sizeof(double)*size);
         delta_in.close();
     }
+    //std::cout<<filename<<std::endl;
+    //std::cout<<std::accumulate(delta,delta+size,0.0)<<std::endl;
 
     timer("Start WC: ",quiet);
     
@@ -148,24 +156,41 @@ int main(int argc, char *argv[]){
 	}
 	std::cout<<std::endl<<"J from 0 to "<<numJs-1<<std::endl;
 	assert((numJs>=order)&&("Order too high"));
-    int* fsize=meta_size(order,numJs);
+    int fsize=meta_size(order,numJs);
     //std::cout<<fsize[0]<<" "<<fsize[1]<<std::endl;
 
-    int* WCind=new int[fsize[0]];
-    double* WC=new double[fsize[1]];
+    int* WCind=new int[fsize*order];
+    double* WC=new double[fsize];
+    double* WCcount=new double[fsize];
 
-    getisoWC(WCind,WC,nside,fsize,delta,order,numJs,sigma,save_memory,quiet);
+    if (loadfilt){
+    	double* filters;
+    	filters=(double*) fftw_malloc(sizeof(double)*numJs*csize);
+        std::ifstream filt_in;
+        filt_in.open(filename_filt);
+        filt_in.read((char*)filters,sizeof(double)*numJs*csize);
+        filt_in.close();
+        //std::cout<<std::accumulate(delta,delta+size,0.0)<<std::endl;
+        getisoWC_loadfilt(WCind,WC,WCcount,nside,fsize,delta,filters,order,numJs,quiet);
+        delete[] filters;
+    }
+    else getisoWC(WCind,WC,WCcount,nside,fsize,delta,order,numJs,sigma,save_memory,quiet);
+
     timer("Make Stat at: ",quiet);
-    if (!quiet) std::cout<<std::endl<<"  Computed "<<fsize[1]<<" coefficients in "<<dt<<". "<<(dt/fsize[1])<<" per coefficient"<<std::endl;//<<start<<step<<fsize<<""<<Bk[0]<<std::endl;
+    if (!quiet) std::cout<<std::endl<<"  Computed "<<fsize<<" coefficients in "<<dt<<". "<<(dt/fsize)<<" per coefficient"<<std::endl;//<<start<<step<<fsize<<""<<Bk[0]<<std::endl;
     timer("Start WC write at: ",quiet);
     std::ofstream fileWC(filenameWC);
-    fileWC.write((char*)WC, sizeof(double)*fsize[1]);
+    fileWC.write((char*)WC, sizeof(double)*fsize);
     fileWC.close();
     std::ofstream fileWCI(filenameWCind);
-    fileWCI.write((char*)WCind, sizeof(int)*fsize[0]);
+    fileWCI.write((char*)WCind, sizeof(int)*fsize*order);
     fileWCI.close();
+    std::ofstream fileWCC(filenameWCcount);
+    fileWCC.write((char*)WCcount, sizeof(int)*fsize);
+    fileWCC.close();
     delete[] WC;
     delete[] WCind;
+    delete[] WCcount;
 
     if (!quiet){
         timer("\nRun successful. ",quiet);
