@@ -91,6 +91,38 @@ def IsoWc(nside=64,order=1,sigma=1,loadfilt=False,filename="./src/data/delta_k.d
         return
     print(subprocess.check_output(arg).decode("utf-8"))
 
+def gfScat(nside=64,numFilts=-1,filename="./src/data/delta_k.dat"
+    ,filenameScat="./src/data/wc.dat",filenameScatcount="./src/data/wccount.dat",filenameScatind="./src/data/wcind.dat",filename_filt=""
+                        ,quiet=False,n_thread=None,only_command=False):
+    """
+    Function for isotropic wavelet scattering
+    
+    """
+    assert numFilts!=-1,"give filter number"
+    arg=[exdir+"given_filter_scatter","-nside",str(nside),"-numFilts",str(numFilts)]
+    arg.append("-filename")
+    arg.append(filename)
+
+    arg.append("-filenameScat")
+    arg.append(filenameScat)
+    arg.append("-filenameScatcount")
+    arg.append(filenameScatcount)
+    arg.append("-filename_filt")
+    arg.append(filename_filt)
+    arg.append("-filenameScatind")
+    arg.append(filenameScatind)
+    
+
+    if quiet:
+        arg.append("-quiet")
+    if n_thread is not None:
+        arg.append("-n_thread")
+        arg.append(str(int(n_thread)))
+    if only_command:
+        print(" ".join(arg))
+        return
+    print(subprocess.check_output(arg).decode("utf-8"))
+
 def bispectrum_custom_k(nside=64,numtrips=-1,filename="./src/data/delta_k.dat",fromrealspace=False
     ,filenameBk="./src/data/bk.dat",filenameBkind="./src/data/bkinds.dat",filenameBkcount="./src/data/bkcount.dat"
                         ,quiet=False,n_thread=None,only_command=False):
@@ -596,6 +628,23 @@ class field():
         self.writetoreadme("\n")
         return res
 
+    def compute_gfScat(self,numFilts,filename_filt,identifier,wcindname=None,wccountname=None,wcname=None,quiet=False,n_thread=None,only_command=False):
+        try:
+            self.atts
+            self.atts[identifier]=[self.folpath+str(identifier)+"ind",self.folpath+str(identifier),self.folpath+str(identifier)+"counts"]
+        except:
+            self.atts={}
+            self.atts[identifier]=[self.folpath+str(identifier)+"ind",self.folpath+str(identifier),self.folpath+str(identifier)+"counts"]
+
+        res=gfScat(nside=self.nside,numFilts=numFilts,filename_filt=filename_filt,filename=self.deltapath
+            ,filenameScat=self.atts[identifier][1],filenameScatcount=self.atts[identifier][2],filenameScatind=self.atts[identifier][0],quiet=quiet,n_thread=n_thread,only_command=only_command)
+
+        self.writetoreadme("Computed given Scattering Coefficients, identifier: "+str(identifier)+"\n")
+        self.writetoreadme("  path: "+self.atts[identifier][1]+"\n")
+        self.writetoreadme("  indpath: "+self.atts[identifier][0]+"\n")
+        self.writetoreadme("  countpath: "+self.atts[identifier][2]+"\n")
+        self.writetoreadme("\n")
+        return res
 
     def plot(self,select="r",z=0,args={},**kwargs):
         if select=="r":
@@ -631,7 +680,7 @@ class field():
             assert False, "Not implemented"
             #plotPk(filenameks=self.kspath,filenamePk=self.pkpath,nside=self.nside,physicalsize=self.physicalsize)
 
-    def data(self,select="r",units="Physical"):
+    def data(self,select="r",units="Physical",identifier=None):
         """
         Options:
           - r: realspace field
@@ -656,6 +705,10 @@ class field():
             if select=="WC":
                 #change units
                 return np.fromfile(self.wcpath, dtype=np.float64)
+            if select=="o":
+                #change units
+                obj=self.atts[identifier]
+                return np.fromfile(obj[1], dtype=np.float64)
         elif units=="Raw":
             if select=="r":
                 return np.fromfile(self.deltapath,dtype=np.float64).reshape(self.nside,self.nside,self.nside)
