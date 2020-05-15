@@ -1,7 +1,7 @@
 #Make
 #CC=mpic++
 CC=g++
-CFLAGS=-Wall -lfftw3_omp -lfftw3 -lm -fopenmp -O3
+CFLAGS=-Wall -lfftw3_omp -lfftw3 -lm -fopenmp -O3 -std=c++11
 
 #options
 OPTIONS=
