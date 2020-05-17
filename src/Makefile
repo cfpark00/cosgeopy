@@ -10,7 +10,7 @@ OPTIONS += -DDOUBLE
 
 COMPILE_FLAGS = $(CFLAGS) $(OPTIONS)
 
-all: gaussianfield powerspectrum bispectrum fft3d bispectrum_custom_k isotropic_wavelet given_filter_scatter
+all: gaussianfield powerspectrum bispectrum fft3d bispectrum_custom_k isotropic_wavelet given_filter_scatter sec_order
 
 gaussianfield: gaussianfield.cpp tools.cpp
 	$(CC) gaussianfield.cpp tools.cpp $(COMPILE_FLAGS) -o gaussianfield 
@@ -28,5 +28,7 @@ isotropic_wavelet: isotropic_wavelet.cpp WC_tools.cpp
 	$(CC) isotropic_wavelet.cpp WC_tools.cpp $(COMPILE_FLAGS) -o isotropic_wavelet
 given_filter_scatter: given_filter_scatter.cpp WC_tools.cpp
 	$(CC) given_filter_scatter.cpp WC_tools.cpp $(COMPILE_FLAGS) -o given_filter_scatter
+sec_order: sec_order.cpp WC_tools.cpp
+	$(CC) sec_order.cpp WC_tools.cpp $(COMPILE_FLAGS) -o sec_order
 clean:
-	$(RM) fullrun gaussianfield powerspectrum bispectrum fft3d bispectrum_custom_k isotropic_wavelet
+	$(RM) fullrun gaussianfield powerspectrum bispectrum fft3d bispectrum_custom_k isotropic_wavelet sec_order

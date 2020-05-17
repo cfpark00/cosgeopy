@@ -246,8 +246,8 @@ void getisoWC_loadfilt(int* WCind,double* WC,double* WCcount,int nside,int fsize
     fftw_complex* tempk;
     tempk=(fftw_complex*) fftw_malloc(sizeof(fftw_complex)*csize);
 
-    p = fftw_plan_dft_r2c_3d(nside,nside,nside, tempr, tempk,FFTW_ESTIMATE);
-    ip = fftw_plan_dft_c2r_3d(nside,nside,nside, tempk, tempr,FFTW_ESTIMATE);
+    p = fftw_plan_dft_r2c_3d(nside,nside,nside, tempr, tempk,FFTW_MEASURE);
+    ip = fftw_plan_dft_c2r_3d(nside,nside,nside, tempk, tempr,FFTW_MEASURE);
 
 
     //DEPTH FIRST IMPLEMENTATION
@@ -271,3 +271,476 @@ void getisoWC_loadfilt(int* WCind,double* WC,double* WCcount,int nside,int fsize
     free(normfield);
 
 }
+
+void get_2nd_order(int* WCind,double* WC,double* WCcount,int nside,int fsize,double* delta,double* filters,int numJs,bool full,bool quiet){
+    int csize=(nside/2+1)*(nside)*(nside);
+    int size=nside*nside*nside;
+    int n[]={nside,nside,nside};
+
+
+    if (!quiet) std::cout<<std::endl<<"  Scatter"<<std::endl;
+
+    #ifdef _OPENMP
+    fftw_init_threads();
+    #endif
+    fftw_plan ip;
+    fftw_plan mp;
+    fftw_plan p;//for the forward fft
+    #ifdef _OPENMP
+    fftw_plan_with_nthreads(omp_get_max_threads());
+    #endif
+
+    //use new-array excecute
+    double* tempr;
+    tempr=(double*) fftw_malloc(sizeof(double)*size*numJs);
+    double* one_tempr;
+    one_tempr=(double*) fftw_malloc(sizeof(double)*size);
+
+    fftw_complex* tempk;
+    tempk=(fftw_complex*) fftw_malloc(sizeof(fftw_complex)*csize*numJs);
+    fftw_complex* one_tempk;
+    one_tempk=(fftw_complex*) fftw_malloc(sizeof(fftw_complex)*csize);
+    fftw_complex* reservoir;
+    reservoir=(fftw_complex*) fftw_malloc(sizeof(fftw_complex)*csize*numJs);
+
+    p=fftw_plan_dft_r2c_3d(nside,nside,nside, one_tempr, one_tempk,FFTW_ESTIMATE);
+
+    mp=fftw_plan_many_dft_r2c(3,n,numJs
+        ,tempr,NULL,1,size
+        ,reservoir,NULL,1,csize
+        ,FFTW_ESTIMATE);
+
+
+    ip=fftw_plan_many_dft_c2r(3,n,numJs
+        ,tempk,NULL,1,csize
+        ,tempr,NULL,1,size
+        ,FFTW_ESTIMATE);
+
+    //data part
+    WC[0]=sum_all(delta,size);
+
+    memcpy(one_tempr,delta,sizeof(double)*size);
+    fftw_execute(p);
+
+
+
+    #pragma omp parallel for shared(tempk)
+    for(int i=0;i<numJs;i++){
+        for(int j=0;j<csize;j++){
+            tempk[i*csize+j][0]=one_tempk[j][0]*filters[i*csize+j];
+            tempk[i*csize+j][1]=one_tempk[j][1]*filters[i*csize+j];
+        }
+    }
+
+    fftw_execute(ip);
+
+    #pragma omp parallel for shared(WC,tempr)
+    for(int i=0;i<numJs;i++){
+        double val;
+        for(int j=0;j<size;j++){
+            val=abs(tempr[i*size+j])/size;
+            tempr[i*size+j]=val;
+            WC[i+1]+=val;
+        }
+    }
+
+    fftw_execute(mp);
+
+        //second order scattering
+    for(int b=0;b<numJs;b++){
+        #pragma omp parallel for shared(tempk)
+        for(int i=0;i<numJs;i++){
+            for(int j=0;j<csize;j++){
+                tempk[i*csize+j][0]=reservoir[b*csize+j][0]*filters[i*csize+j];
+                tempk[i*csize+j][1]=reservoir[b*csize+j][1]*filters[i*csize+j];
+            }
+        }
+
+        fftw_execute(ip);
+
+        #pragma omp parallel for shared(WC)
+        for(int i=0;i<numJs;i++){
+            for(int j=0;j<size;j++){
+                WC[numJs+b*numJs+i]+=abs(tempr[i*size+j])/size;
+            }
+        }
+    }
+
+    //normalization part
+    WCcount[0]=1;
+    for (int i=0;i<size;i++) one_tempr[i]=0.0;
+    one_tempr[0]=1.0;
+
+    fftw_execute(p);
+
+    #pragma omp parallel for shared(tempk)
+    for(int i=0;i<numJs;i++){
+        for(int j=0;j<csize;j++){
+            tempk[i*csize+j][0]=one_tempk[j][0]*filters[i*csize+j];
+            tempk[i*csize+j][1]=one_tempk[j][1]*filters[i*csize+j];
+        }
+    }
+
+    fftw_execute(ip);
+
+    #pragma omp parallel for shared(WC,tempr)
+    for(int i=0;i<numJs;i++){
+        double val;
+        for(int j=0;j<size;j++){
+            val=abs(tempr[i*size+j])/size;
+            tempr[i*size+j]=val;
+            WCcount[i+1]+=val;
+        }
+    }
+
+    fftw_execute(mp);
+
+        //second order scattering
+    for(int b=0;b<numJs;b++){
+        #pragma omp parallel for shared(tempk)
+        for(int i=0;i<numJs;i++){
+            for(int j=0;j<csize;j++){
+                tempk[i*csize+j][0]=reservoir[b*csize+j][0]*filters[i*csize+j];
+                tempk[i*csize+j][1]=reservoir[b*csize+j][1]*filters[i*csize+j];
+            }
+        }
+
+        fftw_execute(ip);
+
+        #pragma omp parallel for shared(WC)
+        for(int i=0;i<numJs;i++){
+            for(int j=0;j<size;j++){
+                WCcount[numJs+b*numJs+i]+=abs(tempr[i*size+j])/size;
+            }
+        }
+    }
+
+
+
+    for(int i=0;i<fsize;i++){
+        if (WCcount[i]!=0) WC[i]/=WCcount[i];
+    }
+
+    free(tempr);
+    free(tempk);
+    free(one_tempk);
+    free(one_tempr);
+    free(reservoir);
+
+    fftw_destroy_plan(mp);
+    fftw_destroy_plan(ip);
+    fftw_destroy_plan(p);
+}
+
+/*
+void get_2nd_order(int* WCind,double* WC,double* WCcount,int nside,int fsize,double* delta,double* filters,int numJs,bool full,bool quiet){
+    int csize=(nside/2+1)*(nside)*(nside);
+    int size=nside*nside*nside;
+    int n[]={nside,nside,nside};
+
+
+    if (!quiet) std::cout<<std::endl<<"  Scatter"<<std::endl;
+
+    #ifdef _OPENMP
+    fftw_init_threads();
+    #endif
+    fftw_plan ip;
+    fftw_plan mp;
+    fftw_plan p;//for the forward fft
+    #ifdef _OPENMP
+    fftw_plan_with_nthreads(omp_get_max_threads());
+    #endif
+
+    if (full){
+        double* tempr;
+        tempr=(double*) fftw_malloc(sizeof(double)*size*numJs);
+        double* one_tempr;
+        one_tempr=(double*) fftw_malloc(sizeof(double)*size);
+
+        fftw_complex* tempk;
+        tempk=(fftw_complex*) fftw_malloc(sizeof(fftw_complex)*csize*numJs);
+        fftw_complex* one_tempk;
+        one_tempk=(fftw_complex*) fftw_malloc(sizeof(fftw_complex)*csize);
+        fftw_complex* reservoir;
+        reservoir=(fftw_complex*) fftw_malloc(sizeof(fftw_complex)*csize*numJs);
+
+        p=fftw_plan_dft_r2c_3d(nside,nside,nside, one_tempr, one_tempk,FFTW_ESTIMATE);
+
+        mp=fftw_plan_many_dft_r2c(3,n,numJs
+            ,tempr,NULL,1,size
+            ,reservoir,NULL,1,csize
+            ,FFTW_ESTIMATE);
+
+
+        ip=fftw_plan_many_dft_c2r(3,n,numJs
+            ,tempk,NULL,1,csize
+            ,tempr,NULL,1,size
+            ,FFTW_ESTIMATE);
+
+        //data part
+        WC[0]=sum_all(delta,size);
+
+        memcpy(one_tempr,delta,sizeof(double)*size);
+        fftw_execute(p);
+
+
+
+        #pragma omp parallel for shared(tempk)
+        for(int i=0;i<numJs;i++){
+            for(int j=0;j<csize;j++){
+                tempk[i*csize+j][0]=one_tempk[j][0]*filters[i*csize+j];
+                tempk[i*csize+j][1]=one_tempk[j][1]*filters[i*csize+j];
+            }
+        }
+
+        fftw_execute(ip);
+
+        #pragma omp parallel for shared(WC,tempr)
+        for(int i=0;i<numJs;i++){
+            double val;
+            for(int j=0;j<size;j++){
+                val=abs(tempr[i*size+j])/size;
+                tempr[i*size+j]=val;
+                WC[i+1]+=val;
+            }
+        }
+
+        fftw_execute(mp);
+
+            //second order scattering
+        for(int b=0;b<numJs;b++){
+            #pragma omp parallel for shared(tempk)
+            for(int i=0;i<numJs;i++){
+                for(int j=0;j<csize;j++){
+                    tempk[i*csize+j][0]=reservoir[b*csize+j][0]*filters[i*csize+j];
+                    tempk[i*csize+j][1]=reservoir[b*csize+j][1]*filters[i*csize+j];
+                }
+            }
+
+            fftw_execute(ip);
+
+            #pragma omp parallel for shared(WC)
+            for(int i=0;i<numJs;i++){
+                for(int j=0;j<size;j++){
+                    WC[numJs+b*numJs+i]+=abs(tempr[i*size+j])/size;
+                }
+            }
+        }
+
+        //normalization part
+        WCcount[0]=1;
+        for (int i=0;i<size;i++) one_tempr[i]=0.0;
+        one_tempr[0]=1.0;
+
+        fftw_execute(p);
+
+        #pragma omp parallel for shared(tempk)
+        for(int i=0;i<numJs;i++){
+            for(int j=0;j<csize;j++){
+                tempk[i*csize+j][0]=one_tempk[j][0]*filters[i*csize+j];
+                tempk[i*csize+j][1]=one_tempk[j][1]*filters[i*csize+j];
+            }
+        }
+
+        fftw_execute(ip);
+
+        #pragma omp parallel for shared(WC,tempr)
+        for(int i=0;i<numJs;i++){
+            double val;
+            for(int j=0;j<size;j++){
+                val=abs(tempr[i*size+j])/size;
+                tempr[i*size+j]=val;
+                WCcount[i+1]+=val;
+            }
+        }
+
+        fftw_execute(mp);
+
+            //second order scattering
+        for(int b=0;b<numJs;b++){
+            #pragma omp parallel for shared(tempk)
+            for(int i=0;i<numJs;i++){
+                for(int j=0;j<csize;j++){
+                    tempk[i*csize+j][0]=reservoir[b*csize+j][0]*filters[i*csize+j];
+                    tempk[i*csize+j][1]=reservoir[b*csize+j][1]*filters[i*csize+j];
+                }
+            }
+
+            fftw_execute(ip);
+
+            #pragma omp parallel for shared(WC)
+            for(int i=0;i<numJs;i++){
+                for(int j=0;j<size;j++){
+                    WCcount[numJs+b*numJs+i]+=abs(tempr[i*size+j])/size;
+                }
+            }
+        }
+
+
+
+        for(int i=0;i<fsize;i++){
+            if (WCcount[i]!=0) WC[i]/=WCcount[i];
+        }
+
+        free(tempr);
+        free(tempk);
+        free(one_tempk);
+        free(one_tempr);
+        free(reservoir);
+
+        fftw_destroy_plan(mp);
+        fftw_destroy_plan(ip);
+        fftw_destroy_plan(p);
+    }
+    else{
+        assert(((numJs+1)%2)&&"Only even number of filters accepted.")
+        double* tempr;
+        tempr=(double*) fftw_malloc(sizeof(double)*size*numJs);
+        double* one_tempr;
+        one_tempr=(double*) fftw_malloc(sizeof(double)*size);
+
+        fftw_complex* tempk;
+        tempk=(fftw_complex*) fftw_malloc(sizeof(fftw_complex)*csize*numJs);
+        fftw_complex* one_tempk;
+        one_tempk=(fftw_complex*) fftw_malloc(sizeof(fftw_complex)*csize);
+        fftw_complex* reservoir;
+        reservoir=(fftw_complex*) fftw_malloc(sizeof(fftw_complex)*csize*numJs);
+
+        p=fftw_plan_dft_r2c_3d(nside,nside,nside, one_tempr, one_tempk,FFTW_ESTIMATE);
+
+        mp=fftw_plan_many_dft_r2c(3,n,numJs
+            ,tempr,NULL,1,size
+            ,reservoir,NULL,1,csize
+            ,FFTW_ESTIMATE);
+
+        std::cout<<"make plan"<<std::endl;
+        ip=fftw_plan_many_dft_c2r(3,n,numJs
+            ,tempk,NULL,1,csize
+            ,tempr,NULL,1,size
+            ,FFTW_ESTIMATE);
+        std::cout<<"done"<<std::endl;
+        //data part
+        WC[0]=sum_all(delta,size);
+
+        memcpy(one_tempr,delta,sizeof(double)*size);
+        fftw_execute(p);
+
+        std::cout<<"applyfilters"<<std::endl;
+
+        #pragma omp parallel for shared(tempk)
+        for(int i=0;i<numJs;i++){
+            for(int j=0;j<csize;j++){
+                tempk[i*csize+j][0]=one_tempk[j][0]*filters[i*csize+j];
+                tempk[i*csize+j][1]=one_tempk[j][1]*filters[i*csize+j];
+            }
+        }
+
+        fftw_execute(ip);
+
+        #pragma omp parallel for shared(WC,tempr)
+        for(int i=0;i<numJs;i++){
+            double val;
+            for(int j=0;j<size;j++){
+                val=abs(tempr[i*size+j])/size;
+                tempr[i*size+j]=val;
+                WC[i+1]+=val;
+            }
+        }
+        std::cout<<"here"<<std::endl;
+        fftw_execute(mp);
+
+            //second order scattering
+        for(int b=0;b<numJs/2+1;b++){
+            #pragma omp parallel for shared(tempk)
+            for(int i=b+1;i<numJs;i++){
+                for(int j=0;j<csize;j++){
+                    tempk[i*csize+j][0]=reservoir[b*csize+j][0]*filters[i*csize+j];
+                    tempk[i*csize+j][1]=reservoir[b*csize+j][1]*filters[i*csize+j];
+                }
+            }
+            #pragma omp parallel for shared(tempk)
+            for(int i=1;i<b+1;i++){
+                for(int j=0;j<csize;j++){
+                    tempk[(i+numJs-b-1)*csize+j][0]=reservoir[b*csize+j][0]*filters[(numJs-i)*csize+j];
+                    tempk[(i+numJs-b-1)*csize+j][1]=reservoir[b*csize+j][1]*filters[(numJs-i)*csize+j];
+                }
+            }
+
+            fftw_execute(ip);
+
+            #pragma omp parallel for shared(WC)
+            for(int i=0;i<numJs;i++){
+                for(int j=0;j<size;j++){
+                    WC[numJs+b*numJs+i]+=abs(tempr[i*size+j])/size;
+                }
+            }
+        }
+
+        //normalization part
+        WCcount[0]=1;
+        for (int i=0;i<size;i++) one_tempr[i]=0.0;
+        one_tempr[0]=1.0;
+
+        fftw_execute(p);
+
+        #pragma omp parallel for shared(tempk)
+        for(int i=0;i<numJs;i++){
+            for(int j=0;j<csize;j++){
+                tempk[i*csize+j][0]=one_tempk[j][0]*filters[i*csize+j];
+                tempk[i*csize+j][1]=one_tempk[j][1]*filters[i*csize+j];
+            }
+        }
+
+        fftw_execute(ip);
+
+        #pragma omp parallel for shared(WC,tempr)
+        for(int i=0;i<numJs;i++){
+            double val;
+            for(int j=0;j<size;j++){
+                val=abs(tempr[i*size+j])/size;
+                tempr[i*size+j]=val;
+                WCcount[i+1]+=val;
+            }
+        }
+
+        fftw_execute(mp);
+
+            //second order scattering
+        for(int b=0;b<numJs;b++){
+            #pragma omp parallel for shared(tempk)
+            for(int i=0;i<numJs;i++){
+                for(int j=0;j<csize;j++){
+                    tempk[i*csize+j][0]=reservoir[b*csize+j][0]*filters[i*csize+j];
+                    tempk[i*csize+j][1]=reservoir[b*csize+j][1]*filters[i*csize+j];
+                }
+            }
+
+            fftw_execute(ip);
+
+            #pragma omp parallel for shared(WC)
+            for(int i=0;i<numJs;i++){
+                for(int j=0;j<size;j++){
+                    WCcount[numJs+b*numJs+i]+=abs(tempr[i*size+j])/size;
+                }
+            }
+        }
+
+
+
+        for(int i=0;i<fsize;i++){
+            if (WCcount[i]!=0) WC[i]/=WCcount[i];
+        }
+
+        free(tempr);
+        free(tempk);
+        free(one_tempk);
+        free(one_tempr);
+        free(reservoir);
+
+        fftw_destroy_plan(mp);
+        fftw_destroy_plan(ip);
+        fftw_destroy_plan(p);
+    }
+
+}
+*/

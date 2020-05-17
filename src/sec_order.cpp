@@ -39,21 +39,6 @@ void timer(const std::string& Message,bool quiet){
     tm1=t;
 }
 
-int meta_size(int order, int numJs){
-    int count=0;
-    for(int m=0;m<order+1;m++){
-        int quo=1;
-        int div=1;
-        for(int i=0;i<m;i++){
-            quo*=(numJs-i);
-            div*=(i+1);
-        }
-        count+=(quo/div);
-    }
-    return count;
-}
-
-
 #include <typeinfo>
 int main(int argc, char *argv[]){
     
@@ -69,14 +54,12 @@ int main(int argc, char *argv[]){
     std::string filenameScatcount("./data/wccount.dat");
 	bool quiet=0;
     bool full=0;
-    int order=2;
     int numFilts=0;
     while (i<argc){
     	if (!strcmp(argv[i],"-quiet")) quiet=1;
     	else if (!strcmp(argv[i],"-nside")) nside = atoi(argv[++i]);
-    	else if (!strcmp(argv[i],"-order")) order = atoi(argv[++i]);
-        else if (!strcmp(argv[i],"-full")) full=1;
     	else if (!strcmp(argv[i],"-filename")) filename = argv[++i];
+        else if (!strcmp(argv[i],"-full")) full=1;
     	else if (!strcmp(argv[i],"-filename_filt")) filename_filt = argv[++i];
     	else if (!strcmp(argv[i],"-numFilts")) numFilts=atoi(argv[++i]);
         else if (!strcmp(argv[i],"-n_thread")) omp_set_num_threads(atoi(argv[++i]));
@@ -99,7 +82,6 @@ int main(int argc, char *argv[]){
         std::cout<<"From real filename="<<filename<<std::endl;
     }
 
-    assert((!full)&&"Not implemented");
 
     /*------Start----*/
     timer("Start program at: ",quiet);
@@ -107,6 +89,7 @@ int main(int argc, char *argv[]){
     int size=nside*nside*nside;
     int csize=nside*nside*(nside/2+1);
 
+    timer("Start Read: ",quiet);
     double *delta;
     delta = (double*) fftw_malloc(sizeof(double)*size);
     std::ifstream delta_in;
@@ -124,16 +107,14 @@ int main(int argc, char *argv[]){
     
     
 	std::cout<<std::endl<<numFilts<<" filters assumed ordered"<<std::endl;
-	assert((numFilts>=order)&&("Order too high"));
-    int fsize=meta_size(order,numFilts);
+    int fsize=1+numFilts+numFilts*numFilts;//(numFilts*(numFilts-1))/2;
 
-    int* Scatind=new int[fsize*order];
+    int* Scatind=new int[fsize*2];
     double* Scat=new double[fsize];
     double* Scatcount=new double[fsize];
 
     timer("Start WC: ",quiet);
-    getisoWC_loadfilt(Scatind,Scat,Scatcount,nside,fsize,delta,filters,order,numFilts,quiet);
-    timer("Start write: ",quiet);
+    get_2nd_order(Scatind,Scat,Scatcount,nside,fsize,delta,filters,numFilts,full,quiet);
 
     delete[] filters;
 
@@ -144,7 +125,7 @@ int main(int argc, char *argv[]){
     fileScat.write((char*)Scat, sizeof(double)*fsize);
     fileScat.close();
     std::ofstream fileScatI(filenameScatind);
-    fileScatI.write((char*)Scatind, sizeof(int)*fsize*order);
+    fileScatI.write((char*)Scatind, sizeof(int)*fsize*2);
     fileScatI.close();
     std::ofstream fileScatC(filenameScatcount);
     fileScatC.write((char*)Scatcount, sizeof(int)*fsize);
